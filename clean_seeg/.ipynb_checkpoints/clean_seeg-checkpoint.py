@@ -2,7 +2,7 @@ from .utils import get_montage, get_chn_labels, get_orig_data, get_chn_positions
 from .clean_autoreject import create_mne_epochs, run_autoreject
 from .clean_drifts import clean_drifts
 from .clean_flatlines import clean_flatlines
-from .clean_PLI import removePLI, zapline, cleanline
+from .clean_PLI import removePLI, zapline, cleanline, notch_filt
 
 class cleanSEEG:
     
@@ -19,7 +19,8 @@ class cleanSEEG:
                  highpass = [0.25, 0.75], 
                  maxFlatlineDuration = 5, 
                  trsfPath=None, 
-                 epoch_length=5):
+                 epoch_length=5, 
+                 processes = None):
         import pyedflib
         self.edf_path = edf_path
         self.chn_csv_path = chn_csv_path
@@ -34,6 +35,7 @@ class cleanSEEG:
         self.maxFlatlineDuration = maxFlatlineDuration
         self.trsfPath = trsfPath
         self.epoch_length = epoch_length
+        self.processes = processes
         # Find sample rate
         # Open edf file
         edf_in = pyedflib.EdfReader(edf_path)
@@ -107,12 +109,15 @@ class cleanSEEG:
                 # First remove line noise
                 print('Removing line noise')
                 if self.methodPLI == 'Cleanline':
-                    signal = cleanline(signal.T, self.srate, bandwidth=self.bandwidth)
+                    signal = cleanline(signal.T, self.srate, processes = self.processes, bandwidth=self.bandwidth)
                 elif self.methodPLI == 'Zapline':
                     signal = zapline(signal.T, self.lineFreq/self.srate, self.srate)
+                elif self.methodPLI == 'NotchFilter': # add bandwidth param
+                    signal = notch_filt(signal.T, self.lineFreq, self.srate)
                 else:
                     raise Exception('PLI method not valid.')
                 signal = signal.T
+                print('PLI removal completed.')
                 
                 # Second, identify noisy segments and highpass filter the data
                 if self.noiseDetect and return_interpolated:
@@ -146,6 +151,7 @@ class cleanSEEG:
                     # Epochs #s
                     last_epoch = last_epoch+len(tmp_df.index)
                     return clean, df_epochs
+                # Else, just return the filtered signal
                 return signal
         except:
             edf_in.close()

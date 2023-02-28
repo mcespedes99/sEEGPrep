@@ -576,6 +576,7 @@ def removeLinesMovingWindow(channel, data, fPassBand, srate, bandwidth, linefreq
     # Output:
     #       data           Cleaned up data
     #
+    print(channel)
     data = np.copy(data[:,channel])
     # Window,overlap and frequency information
     if data.ndim == 1:
@@ -610,7 +611,6 @@ def removeLinesMovingWindow(channel, data, fPassBand, srate, bandwidth, linefreq
         for n in np.arange(nw):
             indx = np.arange(winstart[n],(winstart[n] + Nwin))
             datawin = data[indx,:]
-            # print(datawin)
             datafitwin, f0Sig = fitSignificantFrequencies(datawin, f0, fPassBand, bandwidth, srate, p, padding, tapers)
             f0Mask = np.logical_or(f0Mask,f0Sig)
             # datafitwin0 = datafitwin incorrectly placed
@@ -619,9 +619,7 @@ def removeLinesMovingWindow(channel, data, fPassBand, srate, bandwidth, linefreq
                   + np.multiply((1 - smooth),datafitwin0[(Nwin - Noverlap):Nwin,:])
             # print(f'datafit shape {datafit.shape}')
             datafit[indx, :] = datafitwin
-            # print('caca3')
             datafitwin0 = datafitwin # Moved from above the if statement
-
         data[0:len(datafit),:] = data[0:len(datafit),:] - datafit
     return data.T
 
@@ -652,7 +650,6 @@ def fitSignificantFrequencies(data, f0, fPassBand, bandwidth, srate, p, padding,
 
     Fval, A, f, sig = testSignificantFrequencies(data, fPassBand, srate, p, padding, tapers)
     datafit = np.zeros(N)
-
     frequencyMask = np.zeros(len(f)).tolist()
     f0Significant = np.zeros(len(f0)).tolist()
     if bandwidth != 0:
@@ -675,7 +672,6 @@ def fitSignificantFrequencies(data, f0, fPassBand, bandwidth, srate, p, padding,
             itemp = np.argmin(np.abs(f - f0[n]))
             frequencyMask[itemp] = Fval[itemp] >= sig
             f0Significant[n] = frequencyMask[itemp]
-
     # Estimate the contribution of any significant f0 lines
     frequencyMask = list(map(bool, frequencyMask))
     f0Significant = list(map(bool, f0Significant))
@@ -687,8 +683,8 @@ def fitSignificantFrequencies(data, f0, fPassBand, bandwidth, srate, p, padding,
     if len(fSig)>0:
         x = np.arange(0,N)
         x = x[:,np.newaxis]
-        datafit = np.exp(1j*2*np.pi*x@fSig.T/srate)@ aSig \
-            + np.exp(-1j*2*np.pi*x@fSig.T/srate)@np.conj(aSig)
+        datafit = np.exp(1j*2*np.pi*x@fSig.T/srate)@aSig \
+                + np.exp(-1j*2*np.pi*x@fSig.T/srate)@np.conj(aSig)
     # print(f'datafit size: {datafit.shape}')
     if datafit.ndim == 1:
         return datafit[:,np.newaxis], f0Significant

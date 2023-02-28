@@ -4,7 +4,21 @@ Author: Mauricio Cespedes Tenorio (Western University)
 """
 import numpy as np
 # removePLI
-def removePLI(x, fs, M, B, P, W, f_ac = None):
+def removePLI_chns(data, fs, M, B, P, W, f_ac=None):
+    from multiprocessing.pool import Pool
+    from functools import partial
+    # data: n_samples x n_chn
+    n_chns = data.shape[-1]
+    # Run through different channels
+    chns = np.arange(n_chns)
+    data_clean = np.zeros(data.shape)
+    with Pool(processes=processes) as pool:
+        data_list = pool.map(partial(removePLI, data = data, fs=fs, M=M, B=B, P=P, W=W, f_ac=f_ac), 
+                      channels)
+    
+    return data_list
+
+def removePLI(chn, data, fs, M, B, P, W, f_ac = None):
     """
     removePLI Power Line Interference Cancellation 
     Author: Mauricio Cespedes Tenorio <mcespedes99@gmail.com>
@@ -51,6 +65,8 @@ def removePLI(x, fs, M, B, P, W, f_ac = None):
      title('PSD after interference cancellation')
     """
     from scipy import signal
+    x = data[:, chn]
+    del data
     x_mean = np.mean(x)
     x = np.subtract(x, x_mean) #removing the mean
     N = len(x)
@@ -277,6 +293,7 @@ def zapline(x, fline, srate, nremove=1, p={}, filt=1):
 # Cleanline
 def cleanline(EEG, srate, processes=None, channels = [], linefreq = [60], p=0.01, bandwidth = 2, taperHalfBW = 1, taperWinSize=4, taperWinStep = 1, tau=100, padding = 2):
     from multiprocessing.pool import Pool
+    from multiprocessing import get_context
     from functools import partial
     from .utils import checkTapers, removeLinesMovingWindow
     fPassBand = [0, srate/2]
@@ -305,7 +322,10 @@ def cleanline(EEG, srate, processes=None, channels = [], linefreq = [60], p=0.01
     # Perform the calculation for each channel separately
     channels = np.sort(channels)
     data = np.zeros(EEG.shape)
-    with Pool(processes=processes) as pool:
+    # create a process context. Refer to:
+    # https://github.com/dask/dask/issues/3759
+    ctx = get_context('spawn')
+    with Pool(processes=processes, context=ctx) as pool:
         data_list = pool.map(partial(removeLinesMovingWindow, data=EEG, fPassBand=fPassBand, srate=srate,
                                bandwidth=bandwidth, linefreq=linefreq, maximumIterations=maximumIterations,
                                p=p, padding=padding, tapers=tapers, taperWinSize=taperWinSize, 
@@ -319,3 +339,57 @@ def cleanline(EEG, srate, processes=None, channels = [], linefreq = [60], p=0.01
 
     return data
   
+# Notch filtering the data
+def notch_filt(x, fline, srate, bandwidth = 1, n_harmonics=None, save_fig=False):
+    import scipy.signal
+    import scipy.fftpack
+    import matplotlib.pyplot as plt
+
+    #
+    #  y: filtered data
+    # 
+    #  x: data to filter (n_samples x n_chans)
+    #  T: samples, size of window (can be fractionary) 
+    #  nIterations: number of iterations of smoothing operation (large --> gaussian kernel)
+    #
+
+    # if integ>=size(x,1);
+    #     x=repmat(mean(x),[size(x,1),1,1,1]);
+    #     return;
+    # end
+
+    # Possible harmonics
+    if n_harmonics == None:
+        n_harmonics = np.floor((srate/2)/fline) # how many times fline fits in nyquist
+    frex2notch = np.arange(1, n_harmonics+1)*fline
+
+    ## narrowband filter to remove line noise
+
+    # initialize filtered signal
+    datafilt = x
+
+    # loop over frequencies
+    for idx,fi in enumerate(np.arange(0,len(frex2notch))):
+        # create filter kernel using firwin (fir1 in MATLAB)
+        frange = [frex2notch[fi]-bandwidth/2, frex2notch[fi]+bandwidth/2]
+        # Order of the filter
+        order  = int( 150*(srate/frange[0]) * (idx+1))
+        order  = order + ~order%2
+
+        # filter kernel
+        filtkern = scipy.signal.firwin( order,frange,pass_zero=True,fs=srate )
+#         if save_fig == True: ## REQUIRES UPDATE!!
+#             # save figure of the kernel and its spectral response
+#             plt.subplot(121)
+#             plt.plot(filtkern)
+#             plt.title('Time domain')
+
+#             plt.subplot(122)
+#             plt.plot(np.linspace(0,srate,10000),np.abs(scipy.fftpack.fft(filtkern,10000))**2)
+#             plt.xlim([frex2notch[fi]-30, min(frex2notch[fi]+30, srate/2)])
+#             plt.title('Frequency domain')
+#             plt.show()
+
+    # recursively apply to data    
+    datafilt = scipy.signal.filtfilt(filtkern,1,datafilt, axis=0)
+    return datafilt
