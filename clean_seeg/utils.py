@@ -331,28 +331,28 @@ def square_notch_filt(x, fline, srate, nHarmonics, plotting=False):
             filtorder = int(filtorder/(n*0.6)) # Change 0.6 to a parameter
             if filtorder % 2 == 0:
                 filtorder += 1
-    f_harmonic = n*fline
-    lower_bnd = f_harmonic-5
-    upper_bnd = f_harmonic+5
-    # filter kernel
-    filter_shape = [ 1,1,0,0,1,1 ]
-    filter_freqs = [ 0, lower_bnd*(1-lower_trans), lower_bnd, upper_bnd, \
-                    upper_bnd+upper_bnd*upper_trans, srate/2 ]
-    filter_kern = scipy.signal.firls(filtorder,filter_freqs,filter_shape,fs=srate)
-    # Apply filter:
-    x = scipy.signal.filtfilt(filter_kern,1,x, axis=0)
-    if plotting:
-        fig,ax2 = plt.subplots(nrows=1, ncols=1, figsize=(15, 6))
-        # Power spectrum
-        hz = np.linspace(0,srate/2,int(np.floor(len(filter_kern)/2)+1))
-        filterpow = np.abs(scipy.fftpack.fft(filter_kern))**2
-        ax2.plot(hz,filterpow[:len(hz)], 'ks-')
-        plt.plot(filter_freqs,filter_shape,'ro-')
-        ax2.set_xlim([0,srate/2])
-        ax2.set_xlabel('Frequency (Hz)')
-        ax2.set_ylabel('Filter gain')
-        ax2.set_title('Frequency response')
-        plt.show()
+        f_harmonic = n*fline
+        lower_bnd = f_harmonic-5
+        upper_bnd = f_harmonic+5
+        # filter kernel
+        filter_shape = [ 1,1,0,0,1,1 ]
+        filter_freqs = [ 0, lower_bnd*(1-lower_trans), lower_bnd, upper_bnd, \
+                        upper_bnd+upper_bnd*upper_trans, srate/2 ]
+        filter_kern = scipy.signal.firls(filtorder,filter_freqs,filter_shape,fs=srate)
+        # Apply filter:
+        x = scipy.signal.filtfilt(filter_kern,1,x, axis=0)
+        if plotting:
+            fig,ax2 = plt.subplots(nrows=1, ncols=1, figsize=(15, 6))
+            # Power spectrum
+            hz = np.linspace(0,srate/2,int(np.floor(len(filter_kern)/2)+1))
+            filterpow = np.abs(scipy.fftpack.fft(filter_kern))**2
+            ax2.plot(hz,filterpow[:len(hz)], 'ks-')
+            plt.plot(filter_freqs,filter_shape,'ro-')
+            ax2.set_xlim([0,srate/2])
+            ax2.set_xlabel('Frequency (Hz)')
+            ax2.set_ylabel('Filter gain')
+            ax2.set_title('Frequency response')
+            plt.show()
     # restore DC
     x=x+mn
     return x

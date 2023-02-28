@@ -4,19 +4,24 @@ Author: Mauricio Cespedes Tenorio (Western University)
 """
 import numpy as np
 # removePLI
-def removePLI_chns(data, fs, M, B, P, W, f_ac=None):
+def removePLI_chns(data, fs, M, B, P, W, processes = None, f_ac=None):
     from multiprocessing.pool import Pool
+    from multiprocessing import get_context
     from functools import partial
     # data: n_samples x n_chn
     n_chns = data.shape[-1]
     # Run through different channels
-    chns = np.arange(n_chns)
+    channels = np.arange(n_chns)
     data_clean = np.zeros(data.shape)
-    with Pool(processes=processes) as pool:
+    # create a process context. Refer to:
+    # https://github.com/dask/dask/issues/3759
+    ctx = get_context('spawn')
+    with Pool(processes=processes, context=ctx) as pool:
         data_list = pool.map(partial(removePLI, data = data, fs=fs, M=M, B=B, P=P, W=W, f_ac=f_ac), 
                       channels)
-    
-    return data_list
+    for ch in np.arange(len(data_list)):
+        data_clean[:,ch] = data_list[ch]
+    return data_clean
 
 def removePLI(chn, data, fs, M, B, P, W, f_ac = None):
     """
@@ -65,6 +70,7 @@ def removePLI(chn, data, fs, M, B, P, W, f_ac = None):
      title('PSD after interference cancellation')
     """
     from scipy import signal
+    # print(chn)
     x = data[:, chn]
     del data
     x_mean = np.mean(x)
@@ -193,7 +199,7 @@ def removePLI(chn, data, fs, M, B, P, W, f_ac = None):
             b[k] = b[k]  + u_kp[k]*e/r4[k] 
         s[n]=e
         # return None
-    print(kappa_k)
+    # print(kappa_k)
     return s
 
 # Zapline
@@ -370,6 +376,7 @@ def notch_filt(x, fline, srate, bandwidth = 1, n_harmonics=None, save_fig=False)
 
     # loop over frequencies
     for idx,fi in enumerate(np.arange(0,len(frex2notch))):
+        print(idx)
         # create filter kernel using firwin (fir1 in MATLAB)
         frange = [frex2notch[fi]-bandwidth/2, frex2notch[fi]+bandwidth/2]
         # Order of the filter
@@ -378,6 +385,8 @@ def notch_filt(x, fline, srate, bandwidth = 1, n_harmonics=None, save_fig=False)
 
         # filter kernel
         filtkern = scipy.signal.firwin( order,frange,pass_zero=True,fs=srate )
+        # recursively apply to data    
+        datafilt = scipy.signal.filtfilt(filtkern,1,datafilt, axis=0)
 #         if save_fig == True: ## REQUIRES UPDATE!!
 #             # save figure of the kernel and its spectral response
 #             plt.subplot(121)
@@ -390,6 +399,4 @@ def notch_filt(x, fline, srate, bandwidth = 1, n_harmonics=None, save_fig=False)
 #             plt.title('Frequency domain')
 #             plt.show()
 
-    # recursively apply to data    
-    datafilt = scipy.signal.filtfilt(filtkern,1,datafilt, axis=0)
     return datafilt
