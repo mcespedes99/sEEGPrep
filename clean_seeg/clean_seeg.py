@@ -3,6 +3,8 @@ from .clean_autoreject import create_mne_epochs, run_autoreject
 from .clean_drifts import clean_drifts
 from .clean_flatlines import clean_flatlines
 from .clean_PLI import removePLI_chns, zapline, cleanline, notch_filt
+from .rereference import create_EDF, create_bipolars, extract_location, apply_bipolar_criteria, get_chn_info
+import logging
 
 class cleanSEEG:
     
@@ -38,12 +40,121 @@ class cleanSEEG:
         self.trsfPath = trsfPath
         self.epoch_length = epoch_length
         self.processes = processes
+        # Extra params 
+        self.reref_chn_list = []
+        self.reref_chn_df = []
         # Find sample rate
-        # Open edf file
         edf_in = pyedflib.EdfReader(edf_path)
         self.srate = edf_in.getSampleFrequencies()[0]/edf_in.datarecord_duration
         edf_in.close()
         
+    def rereference(self,
+                    out_edf_path,
+                    write_tsv = False,
+                    out_tsv_path = None,
+                    df_cols = None,
+                    use_clean = False):
+        import os
+        import pyedflib
+        import numpy as np
+        import pandas as pd
+        # Manage some errors:
+        if write_tsv and out_tsv_path==None:
+            raise Exception('To write the tsv file, please indicate an output path.')
+        # TODO: separate rerefering from label map creation
+        print('Running rereference')
+        # Extract info about electrodes positions
+        elec_pos = pd.read_csv(self.chn_csv_path, sep='\t')
+        # Create bipolar combinations
+        bipolar_channels, bipolar_info_df = create_bipolars(elec_pos, self.processes, df_cols = df_cols)
+        # Save values in the class
+        self.reref_chn_list = bipolar_channels
+        self.reref_chn_df = bipolar_info_df
+        # Write tsv
+        if write_tsv: #and not os.path.exists(out_tsv_name):
+            if os.path.exists(out_tsv_path):
+                logging.warning(f"Warning: tsv file {out_tsv_path} will be overwritten.")
+            bipolar_info_df.to_csv(out_tsv_path, index=False, sep = '\t')
+        
+        # print(bipolar_channels)
+        
+        # Create new EDF file
+        if os.path.exists(out_edf_path):
+            logging.warning(f"Warning: edf file {out_edf_path} will be overwritten.")
+        create_EDF(self.edf_path, bipolar_channels, out_edf_path, self.processes)
+        self.rereference_edf = out_edf_path
+    
+    def identify_regions(self,
+                         aparc_aseg_path,
+                         use_reref = True,
+                         write_tsv = False,
+                         out_tsv_path = None,
+                         df_cols = None,
+                         use_clean = False,
+                         discard_wm_un = False,
+                         write_edf = False,
+                         out_edf_path = None):
+        import os
+        # discard_wm_un discards white matter and unknown from edf file (not from csv)
+        # Manage a few exceptions
+        if write_edf and out_edf_path == None:
+            raise Exception('Please indicate a value for out_edf_path or set write_edf to False.')
+        
+        if use_reref:
+            if len(self.reref_chn_list)==0 or len(self.reref_chn_df)==0:
+                raise Exception('Please run rereference first or set use_reref to False.')
+            chn_info_df = self.reref_chn_df
+            df_cols_keys = ['type', 'label', 'x', 'y', 'z', 'group']
+            df_cols_vals = chn_info_df.columns.values.tolist()
+            df_cols = dict(zip(df_cols_keys, df_cols_vals))
+            chn_list = self.reref_chn_list
+        # Extract electrodes information if using not rereference results
+        else:
+            logging.info(f'Extracting channel positions from {self.chn_csv_path}')
+            chn_info_df, chn_list, df_cols = get_chn_info(self.chn_csv_path, df_cols = df_cols)
+            print(chn_list)
+        # Create tsv file with information about location of the channels
+        df_location = extract_location(aparc_aseg_path, self.trsfPath, chn_info_df, df_cols)
+        if write_tsv:
+            if os.path.exists(out_tsv_path):
+                logging.warning(f"Warning: tsv file {out_tsv_path} will be overwritten.")
+            df_location.to_csv(out_tsv_path, index=False, sep = '\t')
+        
+        # Discard data from white matter
+        if discard_wm_un:
+            chn_list = apply_bipolar_criteria(df_location, chn_list, self.processes)
+            print(chn_list)
+            # Overwrite reref info if previously run
+            if use_reref:
+                self.reref_chn_list = chn_list
+            else:
+                raise Exception('Tool currently does not support unipolar case')
+                
+            # Write edf file if requested (only if the chn list changed!)
+            # NOT WORKING FOR UNIPOLAR CASES! create_EDF only works for bipolar
+            if write_edf:
+                if os.path.exists(out_edf_path):
+                    logging.warning(f"edf file {out_edf_path} will be overwritten.")
+                create_EDF(self.edf_path, chn_list, out_edf_path, self.processes)
+                self.rereference_edf = out_edf_path
+        elif (not discard_wm_un) and write_edf:
+            logging.warning(f"edf file {out_edf_path} will not be written as no updates have been made.")
+        return df_location
+    
+    def clean_PLI(self):
+        if self.methodPLI == 'Cleanline':
+            signal = cleanline(signal.T, self.srate, processes = self.processes, bandwidth=self.bandwidth)
+        elif self.methodPLI == 'Zapline':
+            signal = zapline(signal.T, self.lineFreq/self.srate, self.srate)
+        elif self.methodPLI == 'NotchFilter': # add bandwidth param
+            signal = notch_filt(signal.T, self.lineFreq, self.srate, n_harmonics = self.n_harmonics)
+        elif self.methodPLI == 'PLIremoval':
+            signal = removePLI_chns(signal.T, self.srate, 3, [100,0.01,4], [0.1,2,5], 2, processes = self.processes, f_ac=self.lineFreq) #Hardcoded for now
+        else:
+            raise Exception('PLI method not valid.')
+        signal = signal.T
+        return signal
+    
     def clean_epochs(self, return_interpolated=False):
         import pyedflib
         import numpy as np
@@ -65,6 +176,7 @@ class cleanSEEG:
             N=edf_in.getNSamples()[0]
             # Create time vector using srate
             t = np.arange(0, N)/self.srate
+            ### THIS MUST BE CHANGED TO A MORE STANDARD APPROACH
             # Define length of epochs based on the first one
             t_init_id = np.argmin((np.abs(t-t_init)))
             t_end_id = np.argmin((np.abs(t-t_end)))
@@ -110,17 +222,7 @@ class cleanSEEG:
                 # Run cleaning
                 # First remove line noise
                 print('Removing line noise')
-                if self.methodPLI == 'Cleanline':
-                    signal = cleanline(signal.T, self.srate, processes = self.processes, bandwidth=self.bandwidth)
-                elif self.methodPLI == 'Zapline':
-                    signal = zapline(signal.T, self.lineFreq/self.srate, self.srate)
-                elif self.methodPLI == 'NotchFilter': # add bandwidth param
-                    signal = notch_filt(signal.T, self.lineFreq, self.srate, n_harmonics = self.n_harmonics)
-                elif self.methodPLI == 'PLIremoval':
-                    signal = removePLI_chns(signal.T, self.srate, 3, [100,0.01,4], [0.1,2,5], 2, processes = self.processes, f_ac=self.lineFreq) #Hardcoded for now
-                else:
-                    raise Exception('PLI method not valid.')
-                signal = signal.T
+                signal = self.clean_PLI()
                 print('PLI removal completed.')
                 
                 # Second, identify noisy segments and highpass filter the data
@@ -228,3 +330,4 @@ class cleanSEEG:
             return raw, clean_sig, df_epochs
         else:
             return raw, df_epochs
+
