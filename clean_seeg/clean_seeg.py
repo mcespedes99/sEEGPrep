@@ -73,14 +73,14 @@ class cleanSEEG:
         # Write tsv
         if write_tsv: #and not os.path.exists(out_tsv_name):
             if os.path.exists(out_tsv_path):
-                logging.warning(f"Warning: tsv file {out_tsv_path} will be overwritten.")
+                logging.warning(f"tsv file {out_tsv_path} will be overwritten.")
             bipolar_info_df.to_csv(out_tsv_path, index=False, sep = '\t')
         
         # print(bipolar_channels)
         
         # Create new EDF file
         if os.path.exists(out_edf_path):
-            logging.warning(f"Warning: edf file {out_edf_path} will be overwritten.")
+            logging.warning(f"edf file {out_edf_path} will be overwritten.")
         create_EDF(self.edf_path, bipolar_channels, out_edf_path, self.processes)
         self.rereference_edf = out_edf_path
     
@@ -112,23 +112,24 @@ class cleanSEEG:
         else:
             logging.info(f'Extracting channel positions from {self.chn_csv_path}')
             chn_info_df, chn_list, df_cols = get_chn_info(self.chn_csv_path, df_cols = df_cols)
-            print(chn_list)
+            # print(chn_list)
         # Create tsv file with information about location of the channels
         df_location = extract_location(aparc_aseg_path, self.trsfPath, chn_info_df, df_cols)
         if write_tsv:
             if os.path.exists(out_tsv_path):
-                logging.warning(f"Warning: tsv file {out_tsv_path} will be overwritten.")
+                logging.warning(f" tsv file {out_tsv_path} will be overwritten.")
             df_location.to_csv(out_tsv_path, index=False, sep = '\t')
         
         # Discard data from white matter
         if discard_wm_un:
             chn_list = apply_bipolar_criteria(df_location, chn_list, self.processes)
-            print(chn_list)
+            # print(chn_list)
             # Overwrite reref info if previously run
             if use_reref:
                 self.reref_chn_list = chn_list
             else:
-                raise Exception('Tool currently does not support unipolar case')
+                logging.critical('Tool currently does not write the edf file for unipolar cases.')
+                return df_location
                 
             # Write edf file if requested (only if the chn list changed!)
             # NOT WORKING FOR UNIPOLAR CASES! create_EDF only works for bipolar
