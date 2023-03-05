@@ -1,9 +1,9 @@
-from .utils import get_montage, get_chn_labels, get_orig_data, get_chn_positions
+from .utils import get_montage, get_chn_labels, get_orig_data, get_chn_positions, downsampling
 from .clean_autoreject import create_mne_epochs, run_autoreject
 from .clean_drifts import clean_drifts
 from .clean_flatlines import clean_flatlines
 from .clean_PLI import removePLI_chns, zapline, cleanline, notch_filt
-from .rereference import create_EDF, create_bipolars, extract_location, apply_bipolar_criteria, get_chn_info
+from .rereference import create_EDF, create_bipolars, extract_location, apply_bipolar_criteria, get_chn_info, create_EDF_from_signal
 import logging
 
 class cleanSEEG:
@@ -19,7 +19,7 @@ class cleanSEEG:
                  bandwidth = 4,
                  n_harmonics = 3,
                  noiseDetect = True,
-                 highpass = [0.25, 0.75], 
+                 highpass = [0.5, 1], #I set it to [0.5, 1.5] to improve comp cost
                  maxFlatlineDuration = 5, 
                  trsfPath=None, 
                  epoch_length=5, 
@@ -35,7 +35,7 @@ class cleanSEEG:
         self.bandwidth = bandwidth
         self.n_harmonics = n_harmonics
         self.noiseDetect = noiseDetect
-        self.highpass = highpass
+        self.highpass = highpass # Set to None to shut down
         self.maxFlatlineDuration = maxFlatlineDuration
         self.trsfPath = trsfPath
         self.epoch_length = epoch_length
@@ -43,17 +43,23 @@ class cleanSEEG:
         # Extra params 
         self.reref_chn_list = []
         self.reref_chn_df = []
+        self.inter_edf = None
+        self.clean_edf = None
+        
         # Find sample rate
         edf_in = pyedflib.EdfReader(edf_path)
         self.srate = edf_in.getSampleFrequencies()[0]/edf_in.datarecord_duration
         edf_in.close()
-        
+    
+    
+    
     def rereference(self,
                     out_edf_path,
                     write_tsv = False,
                     out_tsv_path = None,
                     df_cols = None,
                     use_clean = False):
+        # TODO: include use_clean feature!
         import os
         import pyedflib
         import numpy as np
@@ -81,11 +87,12 @@ class cleanSEEG:
         # Create new EDF file
         if os.path.exists(out_edf_path):
             logging.warning(f"edf file {out_edf_path} will be overwritten.")
-        create_EDF(self.edf_path, bipolar_channels, out_edf_path, self.processes)
+        create_EDF(self.edf_path, out_edf_path, self.processes, chn_labels = bipolar_channels)
         self.rereference_edf = out_edf_path
     
     def identify_regions(self,
                          aparc_aseg_path,
+                         # conf = None,
                          use_reref = True,
                          write_tsv = False,
                          out_tsv_path = None,
@@ -110,8 +117,10 @@ class cleanSEEG:
             chn_list = self.reref_chn_list
         # Extract electrodes information if using not rereference results
         else:
+            # if conf==None:
+            #     raise Exception('Please indicate a proper configuration (unipolar/bipolar).')
             logging.info(f'Extracting channel positions from {self.chn_csv_path}')
-            chn_info_df, chn_list, df_cols = get_chn_info(self.chn_csv_path, df_cols = df_cols)
+            chn_info_df, chn_list, df_cols = get_chn_info(self.chn_csv_path, df_cols = df_cols) #, conf=conf
             # print(chn_list)
         # Create tsv file with information about location of the channels
         df_location = extract_location(aparc_aseg_path, self.trsfPath, chn_info_df, df_cols)
@@ -127,22 +136,61 @@ class cleanSEEG:
             # Overwrite reref info if previously run
             if use_reref:
                 self.reref_chn_list = chn_list
-            else:
-                logging.critical('Tool currently does not write the edf file for unipolar cases.')
-                return df_location
+            # else:
+            #     logging.critical('Tool currently does not write the edf file for unipolar cases.')
+            #     return df_location
                 
             # Write edf file if requested (only if the chn list changed!)
             # NOT WORKING FOR UNIPOLAR CASES! create_EDF only works for bipolar
             if write_edf:
                 if os.path.exists(out_edf_path):
-                    logging.warning(f"edf file {out_edf_path} will be overwritten.")
-                create_EDF(self.edf_path, chn_list, out_edf_path, self.processes)
+                    logging.warning(f"EDF file {out_edf_path} will be overwritten.")
+                create_EDF(self.edf_path, out_edf_path, self.processes, chn_labels = chn_list)
                 self.rereference_edf = out_edf_path
         elif (not discard_wm_un) and write_edf:
-            logging.warning(f"edf file {out_edf_path} will not be written as no updates have been made.")
+            logging.warning(f"EDF file {out_edf_path} will not be written as no updates have been made.")
         return df_location
     
-    def clean_PLI(self):
+    def downsample(self,
+                   target_srate,
+                   write_edf = False,
+                   out_edf_path = None):
+        import pyedflib
+        from multiprocessing.pool import Pool
+        from multiprocessing import get_context
+        from functools import partial
+        import numpy as np
+        import os
+        # Open edf file
+        edf_in = pyedflib.EdfReader(self.edf_path)
+        # Number of channels to downsample
+        n_chns = edf_in.signals_in_file
+        edf_in.close()
+        # Run through different channels
+        channels = np.arange(n_chns)
+        # create a process context. Refer to:
+        # https://github.com/dask/dask/issues/3759
+        ctx = get_context('spawn')
+        with Pool(processes=self.processes, context=ctx) as pool:
+            data_list, newSrate = zip(*pool.map(partial(downsampling, edf_file=self.edf_path, 
+                                                   orig_srate=self.srate, target_srate=target_srate), channels))
+        n_samples = len(data_list[0])
+        data_dnsampled = np.zeros((n_chns, n_samples))
+        for ch in np.arange(len(data_list)):
+            data_dnsampled[ch,:] = data_list[ch]
+        
+        # Write edf if requested
+        if write_edf:
+            if os.path.exists(out_edf_path):
+                logging.warning(f"EDF file {out_edf_path} will be overwritten.")
+            create_EDF(self.edf_path, out_edf_path, self.processes, signal = data_list, new_srate = newSrate[0])
+            del data_list
+            self.downsample_edf = out_edf_path
+        return data_dnsampled, newSrate[0]
+    
+    
+    
+    def clean_PLI(self, signal):
         if self.methodPLI == 'Cleanline':
             signal = cleanline(signal.T, self.srate, processes = self.processes, bandwidth=self.bandwidth)
         elif self.methodPLI == 'Zapline':
@@ -156,11 +204,29 @@ class cleanSEEG:
         signal = signal.T
         return signal
     
-    def clean_epochs(self, return_interpolated=False):
+    def clean_epochs(self,
+                     return_interpolated=False, 
+                     write_edf_clean = False,
+                     out_edf_path_clean = None,
+                     write_tsv = False,
+                     out_tsv_path = None,
+                     write_edf_int = False,
+                     out_edf_path_int = None
+                    ):
         import pyedflib
         import numpy as np
         import pandas as pd
         import traceback
+        import logging
+        import os
+        # Manage a few exceptions:
+        if write_edf_clean and out_edf_path_clean==None:
+            raise Exception('EDF file with clean signal cannot be written without and appropiate out path')
+        if write_edf_int and out_edf_path_int==None:
+            raise Exception('EDF file with interpolated signal cannot be written without and appropiate out path')
+        if write_tsv and out_tsv_path==None:
+            raise Exception('TSV file with noise information cannot be written without and appropiate out path')
+            
         # Begin by getting the position of the electrodes in RAS space
         chn_labels = get_chn_labels(self.chn_csv_path)
         # Extract the labels and timestamps required
@@ -195,6 +261,11 @@ class cleanSEEG:
             last_epoch = 1
             # Run the algorithm per epoch
             n_epochs = timestamps_epochs.shape[0]
+            # Count of removed elements per epoch
+            n_removed = [0] 
+            # Initialize in 0 as per epoch, the start id will be n_orig[id]-n_removed[id] and the end id: n_orig[id]-n_removed[id+1]
+            # Example: if 10 elements were removed in the first epoch and 12 in the 2nd, then the start id of the second should be 
+            # the original one minus 10 but the end should be the original minus 22
             for epoch_id in np.arange(n_epochs):
                 t_init = timestamps_epochs[epoch_id,0]
                 # Find idx for t_init
@@ -223,43 +294,62 @@ class cleanSEEG:
                 # Run cleaning
                 # First remove line noise
                 print('Removing line noise')
-                signal = self.clean_PLI()
+                signal = self.clean_PLI(signal)
                 print('PLI removal completed.')
                 
                 # Second, identify noisy segments and highpass filter the data
-                if self.noiseDetect and return_interpolated:
-                    clean_sig, interpolated, tmp_df = self.noiseDetect_raw(signal, t_init_id=t_init_id, epoch_id=last_epoch, return_interpolated=return_interpolated)
-                    # Attach the non-clean part of the signal
-                    clean_sig = np.hstack([clean_sig, signal_not_clean])
-                    interpolated = np.hstack([interpolated, signal_not_clean])
-                    print(clean_sig.shape)
-                    # Update clean signal
-                    clean = np.hstack([clean, clean_sig])
-                    # Update interpolated signal
-                    interpolated_sig = np.hstack([interpolated_sig, interpolated])
-                    print(clean.shape)
-                    # Update output df
-                    df_epochs = pd.concat([df_epochs, tmp_df])
-                    # Epochs #s
-                    last_epoch = last_epoch+len(tmp_df.index)
-                    return clean, interpolated_sig, df_epochs
-                    
-                elif self.noiseDetect:
-                    clean_sig, tmp_df = self.noiseDetect_raw(signal, t_init_id=t_init_id, epoch_id=last_epoch, return_interpolated=return_interpolated)
-                    # Attach the non-clean part of the signal
-                    clean_sig = np.hstack([clean_sig, signal_not_clean])
-                    print(clean_sig.shape)
-                    # Update clean signal
-                    clean = np.hstack([clean, clean_sig])
-                    print(clean.shape)
+                clean_sig, interpolated, tmp_df = self.noiseDetect_raw(signal, t_init_id=t_init_id, epoch_id=last_epoch, return_interpolated=return_interpolated)
+                # Attach the non-clean part of the signal
+                clean_sig = np.hstack([clean_sig, signal_not_clean])
+                interpolated = np.hstack([interpolated, signal_not_clean])
+                print(clean_sig.shape)
                 
-                    # Update output df
-                    df_epochs = pd.concat([df_epochs, tmp_df])
-                    # Epochs #s
-                    last_epoch = last_epoch+len(tmp_df.index)
-                    return clean, df_epochs
-                # Else, just return the filtered signal
-                return signal
+                # Update clean signal
+                clean = np.hstack([clean, clean_sig])
+                # Update interpolated signal
+                interpolated_sig = np.hstack([interpolated_sig, interpolated])
+                # Update number of removed elements after autoreject
+                n_removed.append(clean.shape[-1]-interpolated_sig.shape[-1])
+                # Update output df
+                df_epochs = pd.concat([df_epochs, tmp_df])
+                # Epochs #s
+                last_epoch = last_epoch+len(tmp_df.index)
+
+            # Write edfs if requested
+            if write_edf_clean:
+                # Clean signal
+                # convert to list
+                clean_list = [clean[i,:] for i in range(clean.shape[0])]
+                if os.path.exists(out_edf_path_clean):
+                    logging.warning(f"EDF file {out_edf_path_clean} will be overwritten.")
+                create_EDF(self.edf_path, out_edf_path_clean, self.processes, chn_labels = chn_labels, signal = clean_list)
+                del clean_list
+                self.clean_edf = out_edf_path_clean
+            
+            if write_edf_int:
+                # Interpolated signal
+                logging.critical('Currently, writing the EDF file for the interpolated signal is not supported.')
+                # convert to list
+                # int_list = [interpolated_sig[i,:] for i in range(interpolated_sig.shape[0])]
+                # if os.path.exists(out_edf_path_int):
+                #     logging.warning(f"EDF file {out_edf_path_int} will be overwritten.")
+                # create_EDF(self.edf_path, out_edf_path_int, self.processes, chn_labels = chn_labels, signal = int_list, n_removed = n_removed)
+                # del int_list
+                # self.inter_edf = out_edf_path_int
+            
+            # Write tsv with noise data
+            if write_tsv:
+                if os.path.exists(out_tsv_path):
+                    logging.warning(f" tsv file {out_tsv_path} will be overwritten.")
+                df_epochs.to_csv(out_tsv_path, index=False, sep = '\t')
+            
+            # Return 
+            if self.noiseDetect and return_interpolated:
+                return clean, interpolated_sig, df_epochs
+            elif self.noiseDetect:
+                return clean, df_epochs
+            # Else, just return the filtered signal
+            return signal
         except:
             edf_in.close()
             print(traceback.format_exc())

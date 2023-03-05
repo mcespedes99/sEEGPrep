@@ -6,6 +6,64 @@ import numpy as np
 import pandas as pd
 import mne 
 
+def downsampling(chn, edf_file, orig_srate, target_srate):
+    from scipy.interpolate import griddata
+    import scipy.signal
+    import pyedflib
+    # Based on code from Mike X Cohen course (Complete neural signal processing and analysis: Zero to hero)
+    # Get the signal
+    edf_in = pyedflib.EdfReader(edf_file)
+    signal = edf_in.readSignal(chn)
+    edf_in.close()
+    if orig_srate < target_srate:
+        raise Exception('This function only works to downsample and the given original sample rate is bigger than the target one.')
+    elif orig_srate == target_srate:
+        return signal
+    # Get info from given signal
+    npnts = signal.shape[-1]
+    time  = np.arange(0,npnts)/orig_srate
+    
+    # Upsample the signal close to a multiple of target_srate
+    upsampleFactor = int(np.ceil(orig_srate/target_srate))
+    newSrate = upsampleFactor*target_srate
+    # need to round in case it's not exact
+    newNpnts = np.round( npnts * (newSrate/orig_srate) )
+    
+    # new time vector after upsampling
+    newTime = np.arange(0,newNpnts) / newSrate
+    
+    ## continue on to interpolation
+
+    # cut out extra time points: we don't want any data above the original last data
+    newTime = newTime[newTime<=time[-1]]
+    
+    # the new sampling rate actually implemented
+    newSrateActual = 1/np.mean(np.diff(newTime))
+    # print(newSrateActual)
+    
+    # interpolate using griddata
+    upsampled_signal = griddata(time, signal, newTime, method='cubic')
+    
+    ## Downsample to target_srate
+    downsampleFactor = int(np.floor(newSrateActual/target_srate))
+    downsampledSrate = newSrateActual/downsampleFactor
+    
+    # new time vector after upsampling
+    newTv = np.arange(0,newTime[-1],1/downsampledSrate)
+    newPnts = len(newTv)
+    # print(newPnts)
+    
+    ### low-pass filter at new Nyquist frequency!
+    fkern = scipy.signal.firwin(int(14*downsampledSrate/2),downsampledSrate/2,fs=newSrateActual,pass_zero=True)
+    fsignal = scipy.signal.filtfilt(fkern,1,upsampled_signal)
+    
+    # now downsample
+    signal_dsG = fsignal[:-1:downsampleFactor]
+    # print(len(signal_dsG))
+    
+    return signal_dsG, downsampledSrate
+    
+
 def get_chn_positions(chn_csv_path, trsfPath=None):
     """Creates dictionary with the position of each electrode.
     Parameters

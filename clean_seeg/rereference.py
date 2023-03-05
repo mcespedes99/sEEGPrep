@@ -97,38 +97,58 @@ def create_bipolars(electrodes_df, processes, df_cols = None):
         bipolar_elec = pd.concat([bipolar_elec, data], ignore_index=True)
     return bipolar_list, bipolar_elec
 
-# Function to extract info from each channel - bipolar
-def extract_channel_data(chn_number, edf_file, srate_data, bipolar_list):
+# Function to extract info from each channel
+def extract_channel_data(chn_number, edf_file, chn_list):
     edf_in = pyedflib.EdfReader(edf_file)
     # Get labels from original edf file
     channels_labels = edf_in.getSignalLabels()
-    # Get indexes of channels
-    # print('new iter')
-    chn1_id = channels_labels.index(bipolar_list[chn_number][1])
-    chn2_id = channels_labels.index(bipolar_list[chn_number][2])
-    # print(chn_number)
-    signal_chn1 = edf_in.readSignal(chn1_id)
-    signal_chn2 = edf_in.readSignal(chn2_id)
-    chn_data = signal_chn1 - signal_chn2
-    # Deallocate space in memory
-    edf_in.close()
-    del signal_chn1
-    del signal_chn2
+    # print('labels')
+    # print(channels_labels)
+    if type(chn_list[0]) == list or type(chn_list[0]) == tuple: # Case 1: Bipolar
+        # Get indexes of channels
+        # print('new iter')
+        chn1_id = channels_labels.index(chn_list[chn_number][1])
+        chn2_id = channels_labels.index(chn_list[chn_number][2])
+        # print(chn_number)
+        signal_chn1 = edf_in.readSignal(chn1_id)
+        signal_chn2 = edf_in.readSignal(chn2_id)
+        chn_data = signal_chn1 - signal_chn2
+        # Deallocate space in memory
+        edf_in.close()
+        del signal_chn1
+        del signal_chn2
+    elif type(chn_list[0]) == str: # Case 2: unipolar
+        # Get indexes of channel
+        # print('new iter')
+        chn_id = channels_labels.index(chn_list[chn_number])
+        # print(chn_number)
+        chn_data = edf_in.readSignal(chn_id)
+        # Deallocate space in memory
+        edf_in.close()
     return chn_data
 
 
 # Function to extract headers for bipolar channels
-def extract_channel_header(chn_number, original_headers, bipolar_list, channels_labels):
-    # Get indexes of channels
-    chn1_id = channels_labels.index(bipolar_list[chn_number][1])
-    # Update header
-    chn_header = original_headers[chn1_id]
-    chn_header['label'] = bipolar_list[chn_number][0]
+def extract_channel_header(chn_number, original_headers, chn_list, channels_labels):
+    if type(chn_list[0]) == list or type(chn_list[0]) == tuple: # Case 1: Rereferencing to bipolar
+        # Get indexes of channels
+        chn1_id = channels_labels.index(chn_list[chn_number][1])
+        # Update header
+        chn_header = original_headers[chn1_id]
+        chn_header['label'] = chn_list[chn_number][0]
+    elif type(chn_list[0]) == str: # Case 2: no rereferencing
+        # Get indexes of channel
+        chn_id = channels_labels.index(chn_list[chn_number])
+        # Copy header
+        chn_header = original_headers[chn_id]
     return chn_header
 
 # Function to get label map
 def get_colors_labels():
-    with open('/home/mcesped/scratch/code/sEEGPrep/clean_seeg/FreeSurferColorLUT.txt', 'r') as f:
+    __location__ = os.path.realpath(
+    os.path.join(os.getcwd(), os.path.dirname(__file__)))
+    path_LUT = os.path.join(__location__, 'FreeSurferColorLUT.txt')
+    with open(path_LUT, 'r') as f:
         raw_lut = f.readlines()
 
     # read and process line by line
@@ -203,7 +223,7 @@ def extract_location(parc_path, noncon_to_con_tf_path, chn_info_df, df_cols):
     return df
 
 # Function to extract useful information from csv file
-def get_chn_info(csv_file, df_cols = None):
+def get_chn_info(csv_file, df_cols = None): #, conf = 'unipolar'
     df = pd.read_csv(csv_file, sep='\t')
     # df_cols (dict) = {type_record, label, x, y, z, group}
     # the dict can be in any order. The df will have the structure given
@@ -220,18 +240,32 @@ def get_chn_info(csv_file, df_cols = None):
     print(list(df_cols.values()))
     important_data = df[list(df_cols.values())].values
     elec_df = pd.DataFrame(columns=  list(df_cols.keys()), data = important_data)
+    # if conf == 'unipolar':
     chn_list = df[df_cols['label']].values.tolist()
+    # elif conf == 'bipolar':
+    #     # All the labels must be bipolar!!
+    #     labels = df[df_cols['label']].values.tolist()
+    #     pattern = r'^(\D+)(\d+)-(\d+)$'
+    #     chn_list = []
+    #     for label in labels:
+    #         groups_list = list(re.search(pattern=pattern, string=label).groups())
+    #         first_chn = groups_list[0]+groups_list[1]
+    #         second_chn = groups_list[0]+groups_list[2]
+    #         full_bip = re.search(pattern=pattern, string=label).group()
+    #         chn_list.append([full_bip, first_chn, second_chn])
     return elec_df, chn_list, df_cols
     
-
-# Function to create EDF file with bipolar data
-def create_EDF(edf_file, bipolar_channels, out_path, processes):
+# Function to create EDF file based in data
+def create_EDF_from_signal(edf_file, signal, out_path, chn_labels, processes):
+    # chn_labels: labels of channels to write
+    import os
     try:
         edf_in = pyedflib.EdfReader(edf_file)
         # First import labels
         labels = edf_in.getSignalLabels()
+        print(n_samples)
         # Create file:
-        edf_out = pyedflib.EdfWriter(out_path, len(bipolar_channels), file_type=pyedflib.FILETYPE_EDFPLUS)
+        edf_out = pyedflib.EdfWriter(out_path, len(chn_labels), file_type=pyedflib.FILETYPE_EDFPLUS)
         # First set the data from the header of the edf file:
         edf_out.setHeader(edf_in.getHeader())
         headers_orig = edf_in.getSignalHeaders()
@@ -254,20 +288,15 @@ def create_EDF(edf_file, bipolar_channels, out_path, processes):
             # print(annot_id)
             edf_out.writeAnnotation(max(0, annot_orig[0][annot_id]), annot_orig[1][annot_id], annot_orig[2][annot_id])
         
-        # Extract channel information:
-        chn_lists = range(len(bipolar_channels)) #for bipolar
-        print('Channel part')
-        # Create bipolar signals:
-        print(chn_lists)
-        with Pool(processes=processes) as pool2:
-            channel_data = pool2.map(partial(extract_channel_data, edf_file=edf_file, 
-                                            srate_data=srate,
-                                            bipolar_list=bipolar_channels), chn_lists)
+        # Copy required signals:
+        chn_lists = range(len(chn_labels))
+        # print(chn_lists)
+        
         # Create headers:
         with Pool(processes=processes) as pool2:
             headers = pool2.map(partial(extract_channel_header, 
                                       original_headers=headers_orig,
-                                      bipolar_list=bipolar_channels,
+                                      chn_list=chn_labels,
                                       channels_labels=labels), chn_lists)
         
         # Edit headers to make them compliant with edf files
@@ -280,7 +309,123 @@ def create_EDF(edf_file, bipolar_channels, out_path, processes):
                 header['physical_min'] = int(str(header['physical_min'])[0:8])
         
         edf_out.setSignalHeaders(headers)
-        edf_out.writeSamples(channel_data)
+        edf_out.writeSamples(signal)
+        edf_out.close()
+    except Exception:
+        traceback.print_exc()
+        edf_out.close()
+        edf_in.close()
+        
+# Function to establish sampling rate of EDF file
+def get_srate_params(srate, max_srate=254): # max_srate=254 as uses int8
+    n_min = int(np.floor(srate/max_srate))
+    for i in range(n_min+1, int(srate/2)):
+        if srate % i == 0:
+            duration = 1/i
+            if len(str(duration).split(".")[1]) <= 4:
+                return 1/i, srate/i
+    raise Exception('No appropriate parameters found in get_srate_params')
+        
+# Function to create EDF file based in channel list
+def create_EDF(edf_file, out_path, processes, chn_labels=None, signal=None, n_removed = None, new_srate=None):
+    import re
+    # If signal == None, data is extracted from edf file based on the chn_labels
+    try:
+        edf_in = pyedflib.EdfReader(edf_file)
+        # First import labels
+        labels = edf_in.getSignalLabels()
+        # Create file:
+        if chn_labels==None:
+            chn_labels = labels
+        edf_out = pyedflib.EdfWriter(out_path, len(chn_labels), file_type=pyedflib.FILETYPE_EDFPLUS)
+        # First set the data from the header of the edf file:
+        edf_out.setHeader(edf_in.getHeader())
+        headers_orig = edf_in.getSignalHeaders()
+
+        # Set each channel info:
+        if signal == None:
+            N = edf_in.getNSamples()[0]
+        else:
+            N = len(signal[0]) # 0 index chosen randomly
+        # Sampling rate:
+        if new_srate == None:
+            # f.datarecord_duration gives the value is sec and setDatarecordDuration receives it in units
+            # of 10 ms. Therefore: setDatarecordDuration = datarecord_duration*10^6 / 10
+            # This actually is used to set the sample frequency as the max number that can be written in headers is 254 (uses int8)
+            edf_out.setDatarecordDuration(int(edf_in.datarecord_duration*100000)) 
+            srate = edf_in.getSampleFrequencies()[0]/edf_in.datarecord_duration
+        else:
+            srate = new_srate
+        
+        # Annotations
+        annot_orig = edf_in.readAnnotations()
+        # Fill n_removed if not indicated
+        if n_removed == None:
+            n_removed = np.zeros(len(annot_orig)+1)
+        
+        # Close file
+        edf_in.close()
+        print(f'len annot {len(annot_orig)}')
+        print(f'len n_rem {len(n_removed)}')
+        # Write annotations
+        t = np.arange(0, N)/srate
+        # pattern_start = r'Epoch #\d starts.'
+        # pattern_end = r'Epoch #\d ends.'
+        # pattern_id = 0
+        for annot_id in np.arange(len(annot_orig)):
+            # print(annot_id)
+            t_id = np.abs(np.subtract(t, annot_orig[0][annot_id])).argmin()
+            t_annot = t[t_id]
+            edf_out.writeAnnotation(t_annot, annot_orig[1][annot_id], annot_orig[2][annot_id])
+            # This was written for the autoreject case, which is currently not working
+            # if re.match(pattern_start, annot_orig[2][annot_id]):
+            #     edf_out.writeAnnotation(max(0, annot_orig[0][annot_id]-(n_removed[annot_id]*srate)),
+            #                             annot_orig[1][annot_id], annot_orig[2][annot_id])
+            # elif re.match(pattern_end, annot_orig[2][annot_id]):
+            #     edf_out.writeAnnotation(max(0, annot_orig[0][annot_id]-(n_removed[annot_id+1]*srate)),
+            #                             annot_orig[1][annot_id], annot_orig[2][annot_id])
+            # else:
+            #     edf_out.writeAnnotation(max(0, annot_orig[0][annot_id]), annot_orig[1][annot_id], annot_orig[2][annot_id])
+        
+        # Extract channel information:
+        chn_lists = range(len(chn_labels)) 
+        print(chn_labels)
+        print(chn_lists)
+        print('Channel part')
+        if signal == None: # extracting data from edf file (bipolar case)
+            # Create bipolar signals:
+            # print(chn_lists)
+            with Pool(processes=processes) as pool2:
+                signal = pool2.map(partial(extract_channel_data, edf_file=edf_file,
+                                                chn_list=chn_labels), chn_lists)
+        
+        # Create headers:
+        with Pool(processes=processes) as pool2:
+            headers = pool2.map(partial(extract_channel_header, 
+                                      original_headers=headers_orig,
+                                      chn_list=chn_labels,
+                                      channels_labels=labels), chn_lists)
+        
+        # Edit headers to make them compliant with edf files
+        for header in headers:
+            if new_srate != None:
+                # f.datarecord_duration gives the value is sec and setDatarecordDuration receives it in units
+                # of 10 ms. Therefore: setDatarecordDuration = datarecord_duration*10^6 / 10
+                # This actually is used to set the sample frequency as the max number that can be written in 
+                # headers is 254 (uses int8)
+                datarecord_dur, edf_srate = get_srate_params(new_srate)
+                edf_out.setDatarecordDuration(int(datarecord_dur*100000)) 
+                header['sample_rate'] = edf_srate
+                header['sample_frequency'] = edf_srate
+            header['physical_max'] = int(header['physical_max'])
+            header['physical_min'] = int(header['physical_min'])
+            if len(str(header['physical_max']))>8:
+                header['physical_max'] = int(str(header['physical_max'])[0:8])
+            if len(str(header['physical_min']))>8:
+                header['physical_min'] = int(str(header['physical_min'])[0:8])
+        
+        edf_out.setSignalHeaders(headers)
+        edf_out.writeSamples(signal)
         edf_out.close()
     except Exception:
         traceback.print_exc()

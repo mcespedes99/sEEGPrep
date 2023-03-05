@@ -61,11 +61,13 @@ def clean_drifts(signal,srate,Transition=[0.5, 1],Attenuation=80):
     width = 2*(Transition[1]-Transition[0]) / nyq_rate
 
     num_of_taps, beta = kaiserord(Attenuation, width)
+    print(num_of_taps)
     if num_of_taps % 2 == 0:
         num_of_taps = num_of_taps + 1
 
     # Estimate the filter coefficients.
     filtkern = firwin(num_of_taps, Transition[1]/nyq_rate, window=('kaiser', beta), pass_zero=False)
+    print('aqui')
     signal = filtfilt(filtkern, 1, signal, axis=-1)
-
+    print('lolo')
     return signal
