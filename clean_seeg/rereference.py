@@ -237,7 +237,7 @@ def get_chn_info(csv_file, df_cols = None): #, conf = 'unipolar'
             'z': 'z',
             'group': 'group',
         }
-    print(list(df_cols.values()))
+    # print(list(df_cols.values()))
     important_data = df[list(df_cols.values())].values
     elec_df = pd.DataFrame(columns=  list(df_cols.keys()), data = important_data)
     # if conf == 'unipolar':
@@ -389,8 +389,8 @@ def create_EDF(edf_file, out_path, processes, chn_labels=None, signal=None, n_re
         
         # Extract channel information:
         chn_lists = range(len(chn_labels)) 
-        print(chn_labels)
-        print(chn_lists)
+        # print(chn_labels)
+        # print(chn_lists)
         print('Channel part')
         if signal == None: # extracting data from edf file (bipolar case)
             # Create bipolar signals:

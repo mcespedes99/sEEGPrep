@@ -12,7 +12,8 @@ class cleanSEEG:
                  edf_path, 
                  chn_csv_path, 
                  subject, 
-                 subjects_dir, 
+                 subjects_dir,
+                 RmTrendMethod = 'HighPass',
                  cleanPLI = True, 
                  methodPLI = 'Zapline', 
                  lineFreq = 60,
@@ -29,6 +30,7 @@ class cleanSEEG:
         self.chn_csv_path = chn_csv_path
         self.subject = subject
         self.subjects_dir = subjects_dir
+        self.RmTrendMethod = RmTrendMethod
         self.cleanPLI = cleanPLI
         self.methodPLI = methodPLI
         self.lineFreq = lineFreq
@@ -204,13 +206,28 @@ class cleanSEEG:
         signal = signal.T
         return signal
     
+    # Function to remove trend
+    def remove_trend(self, raw):
+        import scipy.signal
+        import numpy as np
+        if self.RmTrendMethod == 'HighPass':
+            detsignal = clean_drifts(raw,self.srate,Transition=self.highpass)
+        elif self.RmTrendMethod == 'LinearDetrend':
+            # linear detrending
+            detsignal = scipy.signal.detrend(raw, axis=-1)
+        elif self.RmTrendMethod == 'Demean':
+            raw_mean = np.mean(raw, axis=-1)
+            detsignal = np.subtract(raw, raw_mean.reshape((raw_mean.shape[0],-1)))
+        return detsignal
+    
+    
     def clean_epochs(self,
                      return_interpolated=False, 
                      write_edf_clean = False,
                      out_edf_path_clean = None,
                      write_tsv = False,
                      out_tsv_path = None,
-                     write_edf_int = False,
+                     write_edf_int = False, # Not working for now
                      out_edf_path_int = None
                     ):
         import pyedflib
@@ -363,8 +380,9 @@ class cleanSEEG:
         print(raw.shape)
         # Remove drifts (highpass data) if required
         if self.highpass != None:
-            print('Removing drifts')
-            raw = clean_drifts(raw,self.srate,Transition=self.highpass)
+            print('Removing trend')
+            raw = self.remove_trend(raw)
+            # raw = clean_drifts(raw,self.srate,Transition=self.highpass)
         print(raw.shape)
         # Remove flat-line channels
         # if self.maxFlatlineDuration != None:

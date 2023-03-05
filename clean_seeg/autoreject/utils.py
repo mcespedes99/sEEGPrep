@@ -324,7 +324,7 @@ def _interpolate_bads_seeg(inst, picks=None):
             # Ignore distances to other bad channels
             dists_to_bad[bads_mask] = np.inf
             # Find closest remaining channels for same frequency
-            closest_idx = np.argmin(dists_to_bad) + (bad % 2)
+            closest_idx = np.argmin(dists_to_bad) #+ (bad % 2)
             inst._data[:,bad,:] = inst._data[:,closest_idx,:]
     except:
         print(picks_bad)
