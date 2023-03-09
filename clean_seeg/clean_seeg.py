@@ -10,9 +10,9 @@ class cleanSEEG:
     
     def __init__(self, 
                  edf_path, 
-                 chn_csv_path, 
-                 subject, 
-                 subjects_dir,
+                 chn_csv_path = None, 
+                 subject = None, 
+                 subjects_dir = None,
                  RmTrendMethod = 'HighPass',
                  cleanPLI = True, 
                  methodPLI = 'Zapline', 
@@ -69,6 +69,8 @@ class cleanSEEG:
         # Manage some errors:
         if write_tsv and out_tsv_path==None:
             raise Exception('To write the tsv file, please indicate an output path.')
+        if self.chn_csv_path == None:
+            raise Exception('Please indicate the path to a tsv file with channels information.')
         # TODO: separate rerefering from label map creation
         print('Running rereference')
         # Extract info about electrodes positions
@@ -94,7 +96,6 @@ class cleanSEEG:
     
     def identify_regions(self,
                          aparc_aseg_path,
-                         # conf = None,
                          use_reref = True,
                          write_tsv = False,
                          out_tsv_path = None,
@@ -104,6 +105,9 @@ class cleanSEEG:
                          write_edf = False,
                          out_edf_path = None):
         import os
+        # Manage exception
+        if self.chn_csv_path == None:
+            raise Exception('Please indicate the path to a tsv file with channels information.')
         # discard_wm_un discards white matter and unknown from edf file (not from csv)
         # Manage a few exceptions
         if write_edf and out_edf_path == None:
@@ -163,6 +167,8 @@ class cleanSEEG:
         from functools import partial
         import numpy as np
         import os
+        # print('aqui')
+        # print(self.edf_path)
         # Open edf file
         edf_in = pyedflib.EdfReader(self.edf_path)
         # Number of channels to downsample
@@ -175,7 +181,8 @@ class cleanSEEG:
         ctx = get_context('spawn')
         with Pool(processes=self.processes, context=ctx) as pool:
             data_list, newSrate = zip(*pool.map(partial(downsampling, edf_file=self.edf_path, 
-                                                   orig_srate=self.srate, target_srate=target_srate), channels))
+                                    orig_srate=self.srate, target_srate=target_srate), channels))
+        # Reformatting to array
         n_samples = len(data_list[0])
         data_dnsampled = np.zeros((n_chns, n_samples))
         for ch in np.arange(len(data_list)):
@@ -228,7 +235,8 @@ class cleanSEEG:
                      write_tsv = False,
                      out_tsv_path = None,
                      write_edf_int = False, # Not working for now
-                     out_edf_path_int = None
+                     out_edf_path_int = None,
+                     verbose = False
                     ):
         import pyedflib
         import numpy as np
@@ -243,7 +251,8 @@ class cleanSEEG:
             raise Exception('EDF file with interpolated signal cannot be written without and appropiate out path')
         if write_tsv and out_tsv_path==None:
             raise Exception('TSV file with noise information cannot be written without and appropiate out path')
-            
+        if self.chn_csv_path == None:
+            raise Exception('Please indicate the path to a tsv file with channels information.')
         # Begin by getting the position of the electrodes in RAS space
         chn_labels = get_chn_labels(self.chn_csv_path)
         # Extract the labels and timestamps required
@@ -269,8 +278,7 @@ class cleanSEEG:
             # Initiate clean signal
             clean = np.array([]).reshape(len(chn_labels),0)
             # Initiate interpolated signal if necessary
-            if return_interpolated:
-                interpolated_sig = np.array([]).reshape(len(chn_labels),0)
+            interpolated_sig = np.array([]).reshape(len(chn_labels),0)
             # Initiate csv epoch file
             cols = ['Epoch #', 'Start ID', 'End ID']+chn_labels
             df_epochs = pd.DataFrame(columns=cols)
@@ -315,7 +323,10 @@ class cleanSEEG:
                 print('PLI removal completed.')
                 
                 # Second, identify noisy segments and highpass filter the data
-                clean_sig, interpolated, tmp_df = self.noiseDetect_raw(signal, t_init_id=t_init_id, epoch_id=last_epoch, return_interpolated=return_interpolated)
+                clean_sig, interpolated, tmp_df = self.noiseDetect_raw(signal, t_init_id=t_init_id, 
+                                                                       epoch_id=last_epoch, 
+                                                                       return_interpolated=True,
+                                                                       verbose = verbose)
                 # Attach the non-clean part of the signal
                 clean_sig = np.hstack([clean_sig, signal_not_clean])
                 interpolated = np.hstack([interpolated, signal_not_clean])
@@ -372,12 +383,14 @@ class cleanSEEG:
             print(traceback.format_exc())
             raise Exception
     
-    def noiseDetect_raw(self, raw, t_init_id=0, epoch_id=0, return_interpolated=False):
+    def noiseDetect_raw(self, raw, t_init_id=0, epoch_id=0, return_interpolated=False, verbose=False):
         import pyedflib
         import numpy as np
         import pandas as pd
         import traceback
         print(raw.shape)
+        if self.subject == None or self.subjects_dir == None:
+            raise Exception('Please indicate a valid subject and directory for the freesurfer outputs.')
         # Remove drifts (highpass data) if required
         if self.highpass != None:
             print('Removing trend')
@@ -413,7 +426,7 @@ class cleanSEEG:
         end_IDs = epochs_ids['End ID']+t_init_id
 
         # Run autoreject
-        epochs_ar, noise_labels = run_autoreject(mne_epochs)
+        epochs_ar, noise_labels = run_autoreject(mne_epochs, verbose = verbose)
         # Create noise df
         # Start-end IDs for each epoch
         IDs_array = np.array([start_IDs,end_IDs]).T

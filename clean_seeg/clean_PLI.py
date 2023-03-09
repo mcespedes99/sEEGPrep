@@ -389,14 +389,14 @@ def notch_filt(x, fline, srate, bandwidth = 1, n_harmonics=None, save_fig=False)
         datafilt = scipy.signal.filtfilt(filtkern,1,datafilt, axis=0)
 #         if save_fig == True: ## REQUIRES UPDATE!!
 #             # save figure of the kernel and its spectral response
-        plt.subplot(121)
-        plt.plot(filtkern)
-        plt.title('Time domain')
+        # plt.subplot(121)
+        # plt.plot(filtkern)
+        # plt.title('Time domain')
 
-        plt.subplot(122)
-        plt.plot(np.linspace(0,srate,10000),np.abs(scipy.fftpack.fft(filtkern,10000))**2)
-        plt.xlim([min(0,frex2notch[fi]-30), min(frex2notch[fi]+30, srate/2)])
-        plt.title('Frequency domain')
-        plt.show()
+        # plt.subplot(122)
+        # plt.plot(np.linspace(0,srate,10000),np.abs(scipy.fftpack.fft(filtkern,10000))**2)
+        # plt.xlim([min(0,frex2notch[fi]-30), min(frex2notch[fi]+30, srate/2)])
+        # plt.title('Frequency domain')
+        # plt.show()
 
     return datafilt

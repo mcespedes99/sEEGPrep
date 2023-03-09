@@ -14,7 +14,6 @@ import numpy as np
 from scipy.signal import kaiserord, firwin, filtfilt
 
 
-# In[49]:
 
 
 def clean_drifts(signal,srate,Transition=[0.5, 1],Attenuation=80):

@@ -1,0 +1,23 @@
+{
+    "Name": "seegprep - Automatic pipeline to perform preprocessing of sEEG recordings.",
+    "BIDSVersion": "1.4.0",
+    "DatasetType": "derivative",
+    "PipelineDescription":
+        {
+            "Name": "seegprep",
+            "Version": "0.1.0",
+            "CodeURL": "http://github.com/mcespedes99/seegprep",
+            "Author": "Mauricio Cespedes Tenorio",
+            "AuthorEmail": "mcesped@uwo.ca"
+        },
+    "GeneratedBy": [
+        {
+            "Name": "seegprep",
+            "Version": "0.1.0",
+            "CodeURL": "http://github.com/mcespedes99/seegprep",
+            "Author": "Mauricio Cespedes Tenorio",
+            "AuthorEmail": "mcesped@uwo.ca"
+ 
+        }
+    ]
+}

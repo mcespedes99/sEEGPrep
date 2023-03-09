@@ -15,12 +15,12 @@ def create_mne_epochs(signal, chn_labels, srate, montage, time_epoch=5):
     mne_epochs.set_montage(montage)
     return mne_epochs, epochs_ids, n_missed
 
-def run_autoreject(mne_epoch_array, exclude = []):
+def run_autoreject(mne_epoch_array, verbose = False, exclude = []):
     from .autoreject.autoreject import AutoReject, compute_thresholds
     import mne
     import numpy as np
     # Create Autoreject instance
-    ar = AutoReject(random_state=42, n_jobs=-1, verbose=True)
+    ar = AutoReject(random_state=42, n_jobs=-1, verbose=verbose)
     # Run autoreject
     epochs_ar, reject_log = ar.fit_transform(mne_epoch_array, return_log=True)
     # Create 'clean'/'noisy' labels (n_epochs x n_channels)
