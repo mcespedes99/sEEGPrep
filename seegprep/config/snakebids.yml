@@ -125,6 +125,31 @@ parse_args:
     default: False
     nargs: '+'
 
+  --run_all:
+    help: 'Run complete preprocessing pipeline: downsampling, cleaning and rereferencing.'
+    default: false
+    action: store_true
+
+  --downsample:
+    help: 'Downsample given edf file.'
+    default: false
+    action: store_true
+
+  --filter:
+    help: 'Filter given edf file (PLI removal and trend removal).'
+    default: false
+    action: store_true
+  
+  --rereference:
+    help: 'Rereference given unipolar edf file to bipolar.'
+    default: false
+    action: store_true
+
+  --regions_id:
+    help: 'Identify regional location of electrodes given edf file and discard white matter and unknown categories.'
+    default: false
+    action: store_true
+
  # custom command-line parameters can then be added, these will get added to the config
  # below is an example to override config['bet_frac']
 #   --smoothing_fwhm:

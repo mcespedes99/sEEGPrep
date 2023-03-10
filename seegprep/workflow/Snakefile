@@ -18,43 +18,68 @@ inputs = snakebids.generate_inputs(
     use_bids_inputs=True,
 )
 
-
-
 #this adds constraints to the bids naming
 wildcard_constraints:  **snakebids.get_wildcard_constraints(config['pybids_inputs'])
 
-#---- end snakebids boilerplate ------------------------------------------------
-rule all:
-    input:
-        clean_edf = expand(
-                        bids(
-                            root='bids',
-                            datatype='ieeg',
-                            suffix='clean.edf',
-                            **inputs.wildcards['ieeg']
-                        ),
-                        zip,
-                        **inputs.zip_lists['ieeg']
-                    ),
-        electrodes_tsv = expand(
-                                bids(
-                                    root='bids',
-                                    datatype='ieeg',
-                                    suffix='regions_native_space.tsv',
-                                    **inputs.wildcards['ieeg']
-                                ),
-                                zip,
-                                **inputs.zip_lists['ieeg']
-                            ),
+# Manage default case (no flags)
+run_all = False
+if (not config['run_all']) and (not config['downsample']) \
+    and (not config['filter']) and (not config['rereference']) \
+    and (not config['regions_id']):
+    print('hehe')
+    run_all = True
+
+#---- end snakebids boilerplate -----------------------------------------------
 
 ## Downsampling
-include: "rules/downsample.smk"
+if config['downsample'] or config['run_all'] or run_all:
+    include: "rules/downsample.smk"
 
 ## Cleaning
-include: "rules/filter.smk"
+if config['filter'] or config['run_all'] or run_all:
+    include: "rules/filter.smk"
 
 ## Rereferencing
-include: "rules/rereference.smk"
+if config['rereference'] or config['run_all'] or run_all:
+    include: "rules/rereference.smk"
 
 ## Region identification
-include: "rules/identify_regions.smk"
+if config['regions_id'] or config['run_all'] or run_all:
+    include: "rules/identify_regions.smk"
+
+
+# include: "rules/all_rule.smk"
+
+### RULE ALL
+# Define inputs
+def define_all_inputs():
+    # If regions_id is the last step
+    if config['run_all'] or config['regions_id']:
+        print('run_all')
+        return rules.identify_regions.output
+    # Else if rereference is the last step
+    elif config['rereference']:
+        return rules.rereference.output
+    # Else if filtering is the last step
+    elif config['filter']:
+        return rules.filter_data.output
+    # Else if downsampling is the last step
+    elif config['downsample']:
+        return rules.downsample.output
+    # Else: default case run_all
+    else:
+        print('hola')
+        return rules.identify_regions.output
+
+rule all:
+    input:
+        expand(
+            expand(
+                define_all_inputs(),
+                allow_missing = True,
+            ),
+            zip,
+            **inputs.zip_lists['ieeg']
+        ),
+    default_target: True
+

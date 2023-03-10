@@ -1,11 +1,32 @@
+# Define output folder for edf file
+def out_dir_filt():
+    # If this is not the last step, place in work
+    if config['run_all'] or config['rereference'] or config['regions_id'] or run_all:
+        return 'work'
+    # If this is the last step, place in bids
+    else:
+        return 'bids'
+
+# Define inputs
+def filter_inputs():
+    # If run_all or downsample are called
+    if config['run_all'] or config['downsample']:
+        print('downsample before filter')
+        return rules.downsample.output.out_edf
+    # Else if filter is the first step to execute
+    elif config['filter']:
+        print('filter is first')
+        return inputs.path['ieeg']
+    # run_all by default
+    else:
+        print('default filter')
+        return rules.downsample.output.out_edf
+
+# Rule
 rule filter_data:
-    input: 
-        edf = bids(
-                    root='derivatives',
-                    datatype='ieeg',
-                    suffix='downsampled.edf',
-                    **inputs.wildcards['ieeg']
-                  ),
+    input:
+        edf = filter_inputs(),
+        # Other parameters
         tsv = inputs.path['seega_tsv'],
         tf = inputs.path['tf'],
     params:
@@ -15,17 +36,17 @@ rule filter_data:
         "subj"
     output:
         out_edf = bids(
-                        root='derivatives',
+                        root=out_dir_filt(),
                         datatype='ieeg',
                         suffix='filtered.edf',
                         **inputs.wildcards['ieeg']
-                  ),
+                ),
         out_tsv = bids(
-                        root='derivatives',
+                        root='bids',
                         datatype='ieeg',
                         suffix='noisy_data.tsv',
                         **inputs.wildcards['ieeg']
-                  ),
+                ),
     log:
         bids(
             root='logs',

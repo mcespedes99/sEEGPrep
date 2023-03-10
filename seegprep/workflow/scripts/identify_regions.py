@@ -10,13 +10,13 @@ sys.path.append(path)
 from clean_seeg import cleanSEEG
 
 def main():
-    edf_path = snakemake.input.edf
-    chn_tsv_path = snakemake.input.tsv
+    edf_path, chn_tsv_path = snakemake.input.edf_tsv
     parc_path = str(snakemake.input.parc)
     noncon_to_con_tf_path = snakemake.input.tf
     processes = int(snakemake.config['processes'])
     out_edf = snakemake.output.out_edf
     out_tsv = snakemake.output.out_tsv
+    reref_run = bool(snakemake.params.reref_run)
 
     # Call class
     seegTF = cleanSEEG(edf_path, # Using downsampled edf
@@ -33,13 +33,25 @@ def main():
                    trsfPath=noncon_to_con_tf_path, # This is the only one I'm changing from default 
                    epoch_length=5,
                    processes = processes)
-
+    if not reref_run:
+        print('reref not run')
+        # Apply rereferencing
+        df_cols = { # TODO: change to parameter in config file!
+                'type': 'type',
+                'label': 'label',
+                'x': 'x',
+                'y': 'y',
+                'z': 'z',
+                'group': 'orig_group'
+            }
+    else:
+        df_cols = None
     # Identify regions
     df = seegTF.identify_regions(parc_path,
                              use_reref = False,
                              write_tsv = True,
                              out_tsv_path = out_tsv,
-                             df_cols = None, ## Using default as it was written in previous step
+                             df_cols = df_cols, ## Using default as it was written in previous step
                              use_clean = False,
                              discard_wm_un = True, # TODO: put as argument
                              write_edf = True,
