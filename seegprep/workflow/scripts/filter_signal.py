@@ -12,7 +12,7 @@ from clean_seeg import cleanSEEG
 def main():
     edf_path = snakemake.input.edf
     chn_tsv_path = snakemake.input.tsv
-    processes = int(snakemake.config['processes'])
+    processes = snakemake.config['processes']
     out_edf = snakemake.output.out_edf
     out_tsv = snakemake.output.out_tsv
     noncon_to_con_tf_path = snakemake.input.tf
@@ -21,30 +21,29 @@ def main():
 
     # Call class
     seegTF = cleanSEEG(edf_path, # Using downsampled edf
-                   chn_tsv_path, 
-                   subject, 
-                   subjects_dir, 
-                   cleanPLI = True, 
-                   RmTrendMethod = 'LinearDetrend',
-                   methodPLI = 'NotchFilter', 
-                   lineFreq = 60,
-                   bandwidth = 4,
-                   n_harmonics = 1, # Only removing fundamental freq
-                   noiseDetect = True,
-                   # highpass = None, 
-                   maxFlatlineDuration = 5, 
-                   trsfPath=noncon_to_con_tf_path, # This is the only one I'm changing from default 
-                   epoch_length=5,
+                   chn_tsv_path,
+                   RmTrendMethod = snakemake.config['detrend_method'],
+                   methodPLI = snakemake.config['methodPLI'], 
+                   lineFreq = snakemake.config['lineFreq'],
+                   bandwidth = snakemake.config['bandwidth'],
+                   n_harmonics = snakemake.config['n_harmonics'],
+                   noiseDetect = snakemake.config['noiseDetect'],
+                   highpass = snakemake.config['highpass'], 
+                   maxFlatlineDuration = snakemake.config['maxFlatlineDuration'], 
+                   trsfPath = noncon_to_con_tf_path, 
+                   epoch_length = snakemake.config['epoch_length'],
                    processes = processes)
 
     # Apply filters
-    clean, df_epochs = seegTF.clean_epochs(return_interpolated=False, 
-                                                            write_edf_clean = True,
-                                                            out_edf_path_clean = out_edf,
-                                                            write_tsv = True,
-                                                            out_tsv_path = out_tsv,
-                                                            verbose = False
-                                                        )
+    clean, df_epochs = seegTF.clean_epochs(subject = subject, 
+                                            subjects_dir = subjects_dir,
+                                            return_interpolated=False, 
+                                            write_edf_clean = True,
+                                            out_edf_path_clean = out_edf,
+                                            write_tsv = True,
+                                            out_tsv_path = out_tsv,
+                                            verbose = False
+                                          )
 
 if __name__=="__main__":
     main()

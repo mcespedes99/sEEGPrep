@@ -12,34 +12,28 @@ from clean_seeg import cleanSEEG
 def main():
     edf_path = snakemake.input.edf
     chn_tsv_path = snakemake.input.tsv
-    processes = int(snakemake.config['processes'])
+    processes = snakemake.config['processes']
     out_edf = snakemake.output.out_edf
     out_tsv = snakemake.output.out_tsv
 
     # Call class
     seegTF = cleanSEEG(edf_path, # Using downsampled edf
-                   chn_tsv_path,
-                   cleanPLI = True, 
-                   RmTrendMethod = 'LinearDetrend',
-                   methodPLI = 'NotchFilter', 
-                   lineFreq = 60,
-                   bandwidth = 4,
-                   n_harmonics = 1, # Only removing fundamental freq
-                   noiseDetect = True,
-                   # highpass = None, 
-                   maxFlatlineDuration = 5, 
-                   epoch_length=5,
-                   processes = processes)
+                       chn_tsv_path,
+                       processes = processes)
 
+    # Define names of columns in tsv file
+    dict_keys = ['type','label','x','y','z','group']
+    dict_vals = snakemake.config['tsv_cols']
+    df_cols = dict(zip(dict_keys, dict_vals))
+    # df_cols = { # TODO: change to parameter!
+    #         'type': 'type',
+    #         'label': 'label',
+    #         'x': 'x',
+    #         'y': 'y',
+    #         'z': 'z',
+    #         'group': 'orig_group'
+    #     }
     # Apply rereferencing
-    df_cols = { # TODO: change to parameter!
-            'type': 'type',
-            'label': 'label',
-            'x': 'x',
-            'y': 'y',
-            'z': 'z',
-            'group': 'orig_group'
-        }
     seegTF.rereference(out_edf, write_tsv = True, out_tsv_path = out_tsv, df_cols = df_cols)
 
 if __name__=="__main__":

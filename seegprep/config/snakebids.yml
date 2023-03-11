@@ -78,6 +78,68 @@ pybids_inputs:
 freesurf_dir: '/home/mcesped/projects/ctb-akhanf/cfmm-bids/Khan/clinical_imaging/epi_iEEG/derivatives/fastsurfer/'
 freesurf_patient_label: 'sub-P{subject}'
 
+# ---------------- Pipeline parameters-------------------
+# 1. Parameters for downsampling step:
+# (1.a) Target sampling rate
+# Default: 200 Hz
+target_srate: 200
+
+
+# 2. Parameters for filtering step:
+# (2.a) Detrend method 
+# Options: 'LinearDetrend','HighPass' (default), 'Demean'
+detrend_method: 'HighPass'
+
+# (2.b) Power line interference removal method
+# Options: 'Cleanline', 'Zapline', 'NotchFilter' (default), 'PLIremoval'
+methodPLI: 'Zapline'
+
+# (2.c) Electrical grid fundamental frequency
+# Default: 60 Hz  
+lineFreq: 60
+
+# (2.d) Bandwidth for Notch filter (TODO) or Cleanline
+# Note: in 'Cleanline', the bandwidth represents the frequency range 
+# (around the theoretical fundamental and harmonic frequencies) in which
+# to search for possible peaks associated with line noise. 
+# Default: 4 (ex: if lineFreq=60, the range would go from 58 to 62)
+bandwidth: 4
+
+# (2.e) Number of harmonics to remove when using Notch Filter
+# Default: 1 (only removes fundamental frequency)
+n_harmonics: 1
+
+# (2.f) Boolean to define whether to run autoreject to find noisy segments
+# of data or not. 
+# Default: True (runs autoreject)
+noiseDetect: True
+
+# (2.g) Transition band of high pass filter used in detrending step (if selected)
+highpass: [0.5, 1] 
+
+# (2.h) Maximum duration of a flat line for a channel to be classified as clean
+maxFlatlineDuration: 5 
+
+# (2.i) Length of epochs to run Autoreject (in seconds).
+# Default: 5 seconds
+epoch_length: 5 
+
+
+# 3. Parameters for region identification step
+# (3.1) Boolean to discard signals from electrodes located in white matter or 
+# 'unknown' region
+# Default: True (discards the signals)
+discard_wm_un: True
+
+
+# 4. Parameter for regions identification and rereferencing step 
+# (4.1) Column names in tsv file with electrodes information
+# Format: [{type of channel}, {channel label}, {x position}, {y position}, {z position}, {group}]
+# Default: ['type', 'label', 'x', 'y', 'z', 'group'] or None (both options are equivalent)
+tsv_cols: ['type', 'label', 'x', 'y', 'z', 'orig_group']
+
+
+#-------------------------------BIDS APP Configuration---------------------------
 #this configures the options to save the BIDSLayout
 # by default, database is not saved (uncomment to save)
 # NOTE: pybids_db_dir must be an absolute path

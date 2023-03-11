@@ -11,16 +11,13 @@ class cleanSEEG:
     def __init__(self, 
                  edf_path, 
                  chn_csv_path = None, 
-                 subject = None, 
-                 subjects_dir = None,
                  RmTrendMethod = 'HighPass',
-                 cleanPLI = True, 
                  methodPLI = 'Zapline', 
                  lineFreq = 60,
                  bandwidth = 4,
                  n_harmonics = 3,
                  noiseDetect = True,
-                 highpass = [0.5, 1], #I set it to [0.5, 1.5] to improve comp cost
+                 highpass = [0.5, 1], 
                  maxFlatlineDuration = 5, 
                  trsfPath=None, 
                  epoch_length=5, 
@@ -28,10 +25,7 @@ class cleanSEEG:
         import pyedflib
         self.edf_path = edf_path
         self.chn_csv_path = chn_csv_path
-        self.subject = subject
-        self.subjects_dir = subjects_dir
         self.RmTrendMethod = RmTrendMethod
-        self.cleanPLI = cleanPLI
         self.methodPLI = methodPLI
         self.lineFreq = lineFreq
         self.bandwidth = bandwidth
@@ -47,6 +41,8 @@ class cleanSEEG:
         self.reref_chn_df = []
         self.inter_edf = None
         self.clean_edf = None
+        self.subject = None, 
+        self.subjects_dir = None
         
         # Find sample rate
         edf_in = pyedflib.EdfReader(edf_path)
@@ -204,7 +200,7 @@ class cleanSEEG:
             signal = cleanline(signal.T, self.srate, processes = self.processes, bandwidth=self.bandwidth)
         elif self.methodPLI == 'Zapline':
             signal = zapline(signal.T, self.lineFreq/self.srate, self.srate)
-        elif self.methodPLI == 'NotchFilter': # add bandwidth param
+        elif self.methodPLI == 'NotchFilter': # TODO: add bandwidth param
             signal = notch_filt(signal.T, self.lineFreq, self.srate, n_harmonics = self.n_harmonics)
         elif self.methodPLI == 'PLIremoval':
             signal = removePLI_chns(signal.T, self.srate, 3, [100,0.01,4], [0.1,2,5], 2, processes = self.processes, f_ac=self.lineFreq) #Hardcoded for now
@@ -229,6 +225,8 @@ class cleanSEEG:
     
     
     def clean_epochs(self,
+                     subject = None, 
+                     subjects_dir = None,
                      return_interpolated=False, 
                      write_edf_clean = False,
                      out_edf_path_clean = None,
@@ -244,6 +242,9 @@ class cleanSEEG:
         import traceback
         import logging
         import os
+        # Include attributes:
+        self.subject = subject
+        self.subjects_dir = subjects_dir
         # Manage a few exceptions:
         if write_edf_clean and out_edf_path_clean==None:
             raise Exception('EDF file with clean signal cannot be written without and appropiate out path')

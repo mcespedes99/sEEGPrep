@@ -11,39 +11,32 @@ from clean_seeg import cleanSEEG
 
 def main():
     edf_path, chn_tsv_path = snakemake.input.edf_tsv
-    parc_path = str(snakemake.input.parc)
+    parc_path = snakemake.input.parc
     noncon_to_con_tf_path = snakemake.input.tf
-    processes = int(snakemake.config['processes'])
+    processes = snakemake.config['processes']
     out_edf = snakemake.output.out_edf
     out_tsv = snakemake.output.out_tsv
-    reref_run = bool(snakemake.params.reref_run)
+    reref_run = snakemake.params.reref_run
 
     # Call class
     seegTF = cleanSEEG(edf_path, # Using downsampled edf
-                   chn_tsv_path,
-                   cleanPLI = True, 
-                   RmTrendMethod = 'LinearDetrend',
-                   methodPLI = 'NotchFilter', 
-                   lineFreq = 60,
-                   bandwidth = 4,
-                   n_harmonics = 1, # Only removing fundamental freq
-                   noiseDetect = True,
-                   # highpass = None, 
-                   maxFlatlineDuration = 5, 
-                   trsfPath=noncon_to_con_tf_path, # This is the only one I'm changing from default 
-                   epoch_length=5,
-                   processes = processes)
+                       chn_tsv_path,
+                       trsfPath = noncon_to_con_tf_path,
+                       processes = processes)
     if not reref_run:
-        print('reref not run')
-        # Apply rereferencing
-        df_cols = { # TODO: change to parameter in config file!
-                'type': 'type',
-                'label': 'label',
-                'x': 'x',
-                'y': 'y',
-                'z': 'z',
-                'group': 'orig_group'
-            }
+        print('reref not run before regions_id')
+        # Define names of columns in tsv file
+        dict_keys = ['type','label','x','y','z','group']
+        dict_vals = snakemake.config['tsv_cols']
+        df_cols = dict(zip(dict_keys, dict_vals))
+        # df_cols = { # TODO: change to parameter in config file!
+        #         'type': 'type',
+        #         'label': 'label',
+        #         'x': 'x',
+        #         'y': 'y',
+        #         'z': 'z',
+        #         'group': 'orig_group'
+        #     }
     else:
         df_cols = None
     # Identify regions
@@ -53,7 +46,7 @@ def main():
                              out_tsv_path = out_tsv,
                              df_cols = df_cols, ## Using default as it was written in previous step
                              use_clean = False,
-                             discard_wm_un = True, # TODO: put as argument
+                             discard_wm_un = snakemake.config['discard_wm_un'],
                              write_edf = True,
                              out_edf_path = out_edf)
 

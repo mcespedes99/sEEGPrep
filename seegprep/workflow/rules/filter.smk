@@ -22,6 +22,7 @@ def filter_inputs():
         print('default filter')
         return rules.downsample.output.out_edf
 
+print(config['freesurf_dir'])
 # Rule
 rule filter_data:
     input:
