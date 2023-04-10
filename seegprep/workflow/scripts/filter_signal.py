@@ -20,7 +20,7 @@ def main():
     subjects_dir = snakemake.params.freesurf_dir
 
     # Call class
-    seegTF = cleanSEEG(edf_path, # Using downsampled edf
+    seegTF = cleanSEEG(edf_path, 
                    chn_tsv_path,
                    RmTrendMethod = snakemake.config['detrend_method'],
                    methodPLI = snakemake.config['methodPLI'], 

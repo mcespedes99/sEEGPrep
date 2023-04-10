@@ -4,6 +4,8 @@ output_dir: '/path/to/output_dir'
 # Resources
 processes: 16
 memory: 64000
+local_scratch: '/tmp'
+local_scratch_env: 'SLURM_TMPDIR'
 
 #enable printing debug statements during parsing -- disable if generating dag visualization
 debug: False
@@ -28,8 +30,20 @@ targets_by_analysis_level:
 pybids_inputs:
   ieeg:
     filters:
-      suffix: 'epoch'
+      suffix: 'ieeg'
       extension: '.edf'
+      datatype: 'ieeg'
+    wildcards:
+      - subject
+      - session
+      - acquisition
+      - task
+      - run
+  
+  annotations:
+    filters:
+      suffix: 'annotations'
+      extension: '.tsv'
       datatype: 'ieeg'
     wildcards:
       - subject
@@ -192,18 +206,23 @@ parse_args:
     default: false
     action: store_true
 
+  --epoch:
+    help: 'Extract epochs from a given edf file.'
+    default: false
+    action: store_true
+
   --downsample:
-    help: 'Downsample given edf file.'
+    help: 'Downsample a given edf file.'
     default: false
     action: store_true
 
   --filter:
-    help: 'Filter given edf file (PLI removal and trend removal).'
+    help: 'Filter a given edf file (PLI removal and trend removal).'
     default: false
     action: store_true
   
   --rereference:
-    help: 'Rereference given unipolar edf file to bipolar.'
+    help: 'Rereference a given unipolar edf file to bipolar.'
     default: false
     action: store_true
 

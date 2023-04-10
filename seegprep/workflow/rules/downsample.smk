@@ -7,10 +7,27 @@ def out_dir_dn():
     else:
         return 'bids'
 
-print('downsample aqui')
+
+# Define inputs
+def dn_inputs():
+    # If run_all or epochs are called
+    if config['run_all'] or config['epoch']:
+        #print('epochs before downsample')
+        return rules.epochs.output.out_edf
+    # Else if downsample is the first step to execute
+    elif config['downsample']:
+        #print('downsample is first')
+        return inputs.path['ieeg']
+    # run_all by default
+    else:
+        #print('default filter')
+        return rules.epochs.output.out_edf
+
+
+#print('downsample aqui')
 rule downsample:
     input: 
-        edf = inputs.path['ieeg'],
+        edf = dn_inputs(),
     group:
         "subj"
     output:

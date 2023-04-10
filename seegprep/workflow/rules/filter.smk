@@ -11,18 +11,18 @@ def out_dir_filt():
 def filter_inputs():
     # If run_all or downsample are called
     if config['run_all'] or config['downsample']:
-        print('downsample before filter')
+        #print('downsample before filter')
         return rules.downsample.output.out_edf
     # Else if filter is the first step to execute
     elif config['filter']:
-        print('filter is first')
+        #print('filter is first')
         return inputs.path['ieeg']
     # run_all by default
     else:
-        print('default filter')
+        #print('default filter')
         return rules.downsample.output.out_edf
 
-print(config['freesurf_dir'])
+#print(config['freesurf_dir'])
 # Rule
 rule filter_data:
     input:

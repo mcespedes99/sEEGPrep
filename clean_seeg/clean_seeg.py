@@ -3,7 +3,7 @@ from .clean_autoreject import create_mne_epochs, run_autoreject
 from .clean_drifts import clean_drifts
 from .clean_flatlines import clean_flatlines
 from .clean_PLI import removePLI_chns, zapline, cleanline, notch_filt
-from .rereference import create_EDF, create_bipolars, extract_location, apply_bipolar_criteria, get_chn_info, create_EDF_from_signal
+from .data_manager import create_EDF, create_bipolars, extract_location, apply_bipolar_criteria, get_chn_info, create_epoch_EDF
 import logging
 
 class cleanSEEG:
@@ -20,7 +20,7 @@ class cleanSEEG:
                  highpass = [0.5, 1], 
                  maxFlatlineDuration = 5, 
                  trsfPath=None, 
-                 epoch_length=5, 
+                 epoch_autoreject=5, # Epoch length for autoreject
                  processes = None):
         import pyedflib
         self.edf_path = edf_path
@@ -34,7 +34,7 @@ class cleanSEEG:
         self.highpass = highpass # Set to None to shut down
         self.maxFlatlineDuration = maxFlatlineDuration
         self.trsfPath = trsfPath
-        self.epoch_length = epoch_length
+        self.epoch_autoreject = epoch_autoreject
         self.processes = processes
         # Extra params 
         self.reref_chn_list = []
@@ -49,8 +49,41 @@ class cleanSEEG:
         self.srate = edf_in.getSampleFrequencies()[0]/edf_in.datarecord_duration
         edf_in.close()
     
-    
-    
+    # Epoch extraction
+    def extract_epochs(self,
+                       event_label,
+                       out_edf_path,
+                       tmpdir):
+        import pyedflib
+        import shutil
+        import os
+        # Find indexes from events
+        f = pyedflib.EdfReader(self.edf_path)
+        id = [value[0] for value in enumerate(f.readAnnotations()[2]) if value[1]==event_label] #TODO: change to regex
+        # Create df with annotations
+        onset_list = f.readAnnotations()[0]
+        f.close()
+        # Find time stamps where the 'awake trigger' event is happening
+        time_stamps = onset_list[id]
+        # Copy file to local scratch if possible
+        new_edf = None
+        if tmpdir != None and os.path.exists(tmpdir):
+            # Copy file to local scratch
+            print('here')
+            file_name = os.path.basename(self.edf_path)
+            new_edf = os.path.join(tmpdir,file_name)
+            shutil.copy(self.edf_path, new_edf)
+        
+        # Here call function to create new EDF file
+        if (new_edf == None):
+            create_epoch_EDF(self.edf_path, time_stamps, out_edf_path, self.processes)
+        else:
+            print('aqui')
+            create_epoch_EDF(new_edf, time_stamps, out_edf_path, self.processes)
+            print('delete')
+            os.remove(new_edf)
+
+    # Reference function
     def rereference(self,
                     out_edf_path,
                     write_tsv = False,
@@ -421,7 +454,7 @@ class cleanSEEG:
         # Initiate csv epoch file
         cols = ['Epoch #', 'Start ID', 'End ID']+keys
         # Create MNE epochs
-        mne_epochs, epochs_ids, n_missed = create_mne_epochs(raw, keys, self.srate, montage, self.epoch_length)
+        mne_epochs, epochs_ids, n_missed = create_mne_epochs(raw, keys, self.srate, montage, self.epoch_autoreject)
         # Update IDs
         start_IDs = epochs_ids['Start ID']+t_init_id
         end_IDs = epochs_ids['End ID']+t_init_id

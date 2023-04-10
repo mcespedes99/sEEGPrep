@@ -11,18 +11,18 @@ def out_dir_reref():
 def reref_inputs():
     # If run_all or filter are called
     if config['run_all'] or config['filter']:
-        print('filter before reref')
+        #print('filter before reref')
         return rules.filter_data.output.out_edf
     # Else if downsample is called
     elif config['downsample']:
-        print('downsample before reref')
+        #print('downsample before reref')
         return rules.downsample.output.out_edf
     # Else if rereference is called but not any of the previous rules
     elif config['rereference']:
-        print('Reref is first')
+        #print('Reref is first')
         return inputs.path['ieeg']
     else: # Default: run_all
-        print('filter before reref (run all)')
+        #print('filter before reref (run all)')
         return rules.filter_data.output.out_edf
 
 # Rule

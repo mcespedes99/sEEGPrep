@@ -3,6 +3,7 @@
 import snakebids
 from snakebids import bids
 from os.path import join
+import pandas as pd
 
 configfile: workflow.source_path('../config/snakebids.yml')
 
@@ -18,18 +19,71 @@ inputs = snakebids.generate_inputs(
     use_bids_inputs=True,
 )
 
+# Filter inputs based on annotations
+def get_inputs(input_path, **zip_lists):
+    # Possible edf files
+    annot_files = expand(
+                input_path,
+                zip,
+                **zip_lists
+            )
+    # print(annot_files)
+    # Convert zip list to tuples and add to a set
+    set_wildcards_vals = set()
+    list_wildcards_vals = []
+    values_wildcards = list(zip_lists.values())
+    for idx in range(len(annot_files)):
+        tmp_tuple = tuple([value[idx] for value in values_wildcards])
+        set_wildcards_vals.add(tmp_tuple)
+        # Also save in list to use it in the filtering (an ordered list is needed)
+        list_wildcards_vals.append(tmp_tuple)
+
+    # Create remove set
+    remove_set = set()
+    # Check annotation files to filter inputs
+    for idx, annot_file in enumerate(annot_files):
+        # Open annotation file to check if any event is in the data
+        annot = pd.read_csv(annot_file, sep='\t')
+        # Find time stamps indexes where the 'awake trigger' event is happening
+        # returns True on all the indexes if no event is found
+        cond = ~annot['event'].str.contains('awake trigger', case=False)
+        # If no event is found, then add to remove set
+        if cond.all():
+            remove_set.add(list_wildcards_vals[idx])
+    # Get filtered values
+    out_wildcards_vals = set_wildcards_vals-remove_set
+
+    # First get dict keys
+    out_ziplist_keys = list(zip_lists.keys())
+    # Convert the set to list of lists
+    out_ziplist_vals = []
+    for key_id in range(len(out_ziplist_keys)):
+        out_ziplist_vals.append([tuple_val[key_id] for tuple_val in out_wildcards_vals])
+    # Construct dictionary
+    out_ziplist = dict(zip(out_ziplist_keys, out_ziplist_vals))
+    return out_ziplist
+
 #this adds constraints to the bids naming
 wildcard_constraints:  **snakebids.get_wildcard_constraints(config['pybids_inputs'])
 
 # Manage default case (no flags)
 run_all = False
-if (not config['run_all']) and (not config['downsample']) \
+if (not config['run_all']) and (not config['epoch']) and (not config['downsample']) \
     and (not config['filter']) and (not config['rereference']) \
     and (not config['regions_id']):
-    print('hehe')
     run_all = True
 
+## Input definition
+if config['epoch'] or config['run_all'] or run_all:
+    # Get filtered ziplist based on annotations of interest if extracting epochs
+    input_ziplist = get_inputs(inputs.path['annotations'], **inputs.zip_lists['annotations'])
+else:
+    input_ziplist = inputs.zip_lists['ieeg']
+
 #---- end snakebids boilerplate -----------------------------------------------
+## Epoch extraction rule
+if config['epoch'] or config['run_all'] or run_all:
+    include: "rules/epoch_extraction.smk"
 
 ## Downsampling
 if config['downsample'] or config['run_all'] or run_all:
@@ -55,7 +109,7 @@ if config['regions_id'] or config['run_all'] or run_all:
 def define_all_inputs():
     # If regions_id is the last step
     if config['run_all'] or config['regions_id']:
-        print('run_all')
+        # print('run_all')
         return rules.identify_regions.output
     # Else if rereference is the last step
     elif config['rereference']:
@@ -66,10 +120,13 @@ def define_all_inputs():
     # Else if downsampling is the last step
     elif config['downsample']:
         return rules.downsample.output
+    # Else if epoch extraction is the last step
+    elif config['epoch']:
+        return rules.epochs.output
     # Else: default case run_all
     else:
-        print('hola')
-        return rules.identify_regions.output
+        # print('hola')
+        return rules.epochs.output
 
 rule all:
     input:
@@ -79,7 +136,7 @@ rule all:
                 allow_missing = True,
             ),
             zip,
-            **inputs.zip_lists['ieeg']
+            **input_ziplist
         ),
     default_target: True
 
