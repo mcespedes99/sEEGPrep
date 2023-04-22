@@ -46,6 +46,14 @@ rule rereference:
                         suffix='reref_native_space.tsv',
                         **inputs.wildcards['ieeg']
                 ),
+    resources:
+        mem_mb = 16000,
+    benchmark:
+       bids(
+           root='benchmark',
+           suffix='benchmarkReref.txt',
+           **inputs.wildcards['ieeg']
+       ),
     log:
         bids(
             root='logs',

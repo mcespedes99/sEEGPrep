@@ -72,11 +72,14 @@ def create_bipolars(electrodes_df, processes, df_cols = None):
         }
     # print(df_cols['group'])
     channels = dict((label,[]) for label in electrodes_df[df_cols['group']].unique())
-    pattern = r'([A-Z]+)(\d+)'
-    electrode_labels = electrodes_df[df_cols['label']].values
+    # Try to options of labels
+    pattern1 = r'([A-Z0-9]+[-]+)(\d+)$' # for electrodes like 'LOpS-10' or 'LOpS1-10'
+    pattern2 = r'([A-Z]+[-]*)(\d+)$' # for electrodes like 'LOpS10'
     # Extract channels info
     for electrode in electrodes_df[df_cols['label']].values:
-        match = re.match(pattern, electrode, re.IGNORECASE)
+        match = re.match(pattern1, electrode, re.IGNORECASE)
+        if not match:
+            match = re.match(pattern2, electrode, re.IGNORECASE)
         channels[match.group(1)].append(match.group(2))
     # print(channels)
     # Create new list
@@ -423,21 +426,13 @@ def create_epoch_EDF(edf_file, time_stamps, out_path, processes):
         edf_in.close()
         # Create time ids
         list_epochs_ids = list(range(time_stamps.size))
-        print('Time part')
+        # Extract channel information:
+        chn_lists = range(len(labels))
+        # chn_lists = range(len(bipolar_channels)) #for bipolar
         # Extracting time indexes based on time stamps
         with Pool(processes=processes) as pool:
             t_ids = pool.map(partial(extract_time_ids, time_vector=t, timestamps_array=time_stamps, srate=srate), 
                             list_epochs_ids)
-        # Write annotations at the different epochs times (beginning and end of epochs)
-        for id, (t_init_id, t_end_id) in enumerate(t_ids):
-            # Write annotations
-            edf_out.writeAnnotation(t[t_init_id]-t_0, -1, f"Epoch #{id+1} starts.")
-            edf_out.writeAnnotation(t[t_end_id]-t_0, -1, f"Epoch #{id+1} ends.")
-        # Deallocate space in memory
-        del t
-        # Extract channel information:
-        chn_lists = range(len(labels))
-        # chn_lists = range(len(bipolar_channels)) #for bipolar
         print('Channel part')
         # Unipolar case:
         with Pool(processes=processes) as pool2:
@@ -455,6 +450,14 @@ def create_epoch_EDF(edf_file, time_stamps, out_path, processes):
         
         edf_out.setSignalHeaders(headers)
         edf_out.writeSamples(channel_data)
+        print('Time part')
+        # Write annotations at the different epochs times (beginning and end of epochs)
+        for id, (t_init_id, t_end_id) in enumerate(t_ids):
+            # Write annotations
+            edf_out.writeAnnotation(t[t_init_id]-t_0, -1, f"Epoch #{id+1} starts.")
+            edf_out.writeAnnotation(t[t_end_id]-t_0, -1, f"Epoch #{id+1} ends.")
+        # Deallocate space in memory
+        del t
         edf_out.close()
     except Exception:
         traceback.print_exc()

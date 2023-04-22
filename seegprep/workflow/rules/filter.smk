@@ -48,6 +48,14 @@ rule filter_data:
                         suffix='noisy_data.tsv',
                         **inputs.wildcards['ieeg']
                 ),
+    resources:
+        mem_mb = 16000,
+    benchmark:
+       bids(
+           root='benchmark',
+           suffix='benchmarkFilter.txt',
+           **inputs.wildcards['ieeg']
+       ),
     log:
         bids(
             root='logs',

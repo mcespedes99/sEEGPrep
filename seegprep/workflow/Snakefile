@@ -46,7 +46,7 @@ def get_inputs(input_path, **zip_lists):
         annot = pd.read_csv(annot_file, sep='\t')
         # Find time stamps indexes where the 'awake trigger' event is happening
         # returns True on all the indexes if no event is found
-        cond = ~annot['event'].str.contains('awake trigger', case=False)
+        cond = ~annot['event'].str.contains('awake trigger', case=False, na=False)
         # If no event is found, then add to remove set
         if cond.all():
             remove_set.add(list_wildcards_vals[idx])
@@ -101,6 +101,7 @@ if config['rereference'] or config['run_all'] or run_all:
 if config['regions_id'] or config['run_all'] or run_all:
     include: "rules/identify_regions.smk"
 
+# print(config['processes'])
 
 # include: "rules/all_rule.smk"
 

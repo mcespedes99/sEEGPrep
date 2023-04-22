@@ -1,5 +1,6 @@
 from pathlib import Path
 import sys
+import logging
 
 # Adding path to import cleanSEEG
 path = str(Path(Path(__file__).parent.absolute()).parent.parent.parent.absolute())
@@ -13,22 +14,21 @@ def main():
     edf_path = snakemake.input.edf
     processes = snakemake.config['processes']
     out_edf = snakemake.output.out_edf
+    LOG_FILENAME = snakemake.log[0]
+    logging.basicConfig(filename=LOG_FILENAME, level=logging.DEBUG)
+    try:
+        # Call class
+        seegTF = cleanSEEG(edf_path,
+                        processes = processes)
 
-    # print(edf_path)
-    # print(chn_tsv_path)
-    # print(subject)
-    # print(subjects_dir)
-    # print(noncon_to_con_tf_path)
-    # print(out_edf)
-    # Call class
-    seegTF = cleanSEEG(edf_path,
-                       processes = processes)
-
-    # Apply downsampling
-    target_srate = snakemake.config['target_srate']
-    signal_dsG, downsampledSrate = seegTF.downsample(target_srate=target_srate,
-                                                     write_edf = True,
-                                                     out_edf_path = out_edf)
+        # Apply downsampling
+        target_srate = snakemake.config['target_srate']
+        signal_dsG, downsampledSrate = seegTF.downsample(target_srate=target_srate,
+                                                        write_edf = True,
+                                                        out_edf_path = out_edf)
+    except:
+        logging.exception('Got exception on main handler')
+        raise
 
 if __name__=="__main__":
     main()

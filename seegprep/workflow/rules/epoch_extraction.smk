@@ -38,15 +38,17 @@ rule epochs:
                   )
     # This can be changed using --set-threads epochs=N. It acts as a balance between subject and channel parallelization.
     threads: config['processes']
-    group: 'epochs'
+    group:
+        "subj"
     resources:
-        storage_mb = get_edf_mb # Indicate avail space using --resources storage_mb=750000
-    #benchmark:
-    #    bids(
-    #        root='benchmark',
-    #        suffix='benchmark.txt',
-    #        **inputs.wildcards['ieeg']
-    #    ),
+        mem_mb = 64000,
+        storage_mb = get_edf_mb, # Indicate avail space using --resources storage_mb=750000
+    benchmark:
+       bids(
+           root='benchmark',
+           suffix='benchmarkEpoch.txt',
+           **inputs.wildcards['ieeg']
+       ),
     log:
         bids(
             root='logs',

@@ -37,6 +37,14 @@ rule downsample:
                         suffix='downsampled.edf',
                         **inputs.wildcards['ieeg']
                   )
+    resources:
+        mem_mb = 16000,
+    benchmark:
+       bids(
+           root='benchmark',
+           suffix='benchmarkDN.txt',
+           **inputs.wildcards['ieeg']
+       ),
     log:
         bids(
             root='logs',

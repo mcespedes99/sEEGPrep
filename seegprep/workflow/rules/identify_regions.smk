@@ -1,3 +1,4 @@
+import os
 # Define inputs 
 def region_id_inputs():
     # If run_all or filter are called
@@ -20,12 +21,26 @@ def region_id_inputs():
         #print('reref before regionsID (run all)')
         return rules.rereference.output.out_edf, rules.rereference.output.out_tsv
 
+def define_parc(wildcards, parc_path):
+    parc_options = expand(parc_path, extension=['.mgz','.orig.mgz'], **wildcards)
+    # print(parc_options)
+    parc_cleaned = []
+    for parc_file in parc_options:
+        if os.path.exists(parc_file):
+            parc_cleaned.append(parc_file)
+    # print('Clean')
+    # print(parc_cleaned)
+    if not parc_cleaned:
+        raise ValueError('No parcellation file aparc+aseg was found.')
+    return parc_cleaned[0]
+
 # Rule
 rule identify_regions:
     input:
         edf_tsv = region_id_inputs(),
         # Other parameters
-        parc = inputs.path['parc'],
+        parc = lambda wc: define_parc(wc, inputs.path['parc']),
+        # expand(inputs.path['parc'], zip, extension=['.mgz','.orig.mgz'], allow_missing=True),
         tf = inputs.path['tf'],
     params:
         reref_run = config['run_all'] or config['rereference'] or run_all
@@ -44,6 +59,14 @@ rule identify_regions:
                         suffix='regions_native_space.tsv',
                         **inputs.wildcards['ieeg']
                 ),
+    resources:
+        mem_mb = 16000,
+    benchmark:
+       bids(
+           root='benchmark',
+           suffix='benchmarkRegionID.txt',
+           **inputs.wildcards['ieeg']
+       ),
     log:
         bids(
             root='logs',

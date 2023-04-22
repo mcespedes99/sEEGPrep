@@ -75,7 +75,7 @@ pybids_inputs:
       - acquisition
       - task
       - run
-    custom_path: '/home/mcesped/projects/ctb-akhanf/cfmm-bids/Khan/clinical_imaging/epi_iEEG/derivatives/fastsurfer/sub-P{subject}/mri/aparc+aseg.orig.mgz'
+    custom_path: /home/mcesped/projects/ctb-akhanf/cfmm-bids/Khan/clinical_imaging/epi_iEEG/derivatives/fastsurfer/sub-P{subject}/mri/aparc+aseg{extension}
 
   tf:
     filters:
