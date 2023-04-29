@@ -14,10 +14,12 @@ import mne
 
 # Function to create bipolar channels from given unipolars
 def create_bipolar_comb(id, dict_key, channels_dict):
-    bipolar_chn = dict_key+channels_dict[dict_key][id]+'-'+channels_dict[dict_key][id+1] 
-    chn1_label = dict_key+channels_dict[dict_key][id]
-    chn2_label = dict_key+channels_dict[dict_key][id+1]
-    return (bipolar_chn, chn1_label, chn2_label)
+    # Only create bipolar channels with the closest or second closest electrode
+    if abs(int(channels_dict[dict_key][id])-int(channels_dict[dict_key][id+1])) <= 2:
+        bipolar_chn = dict_key+channels_dict[dict_key][id]+'-'+channels_dict[dict_key][id+1] 
+        chn1_label = dict_key+channels_dict[dict_key][id]
+        chn2_label = dict_key+channels_dict[dict_key][id+1]
+        return (bipolar_chn, chn1_label, chn2_label)
 
 def create_bipolar_combi(id, bipolar_list):
     return bipolar_list[id]
@@ -36,28 +38,30 @@ def apply_bipolar_criteria(df_bipolar, bipolar_list, processes):
 
 # Function to extract position of bipolar channels
 def bipolar_info(id, dict_key, channels_dict, elec_pos, df_cols):
-    # Bipolar channel label
-    bipolar_chn = dict_key+channels_dict[dict_key][id]+'-'+channels_dict[dict_key][id+1] 
-    # Channels' labels
-    chn1_label = dict_key+channels_dict[dict_key][id]
-    chn2_label = dict_key+channels_dict[dict_key][id+1]
-    # Extract positions
-    inf_chn1 = elec_pos.loc[elec_pos[df_cols['label']] == chn1_label]
-    inf_chn2 = elec_pos.loc[elec_pos[df_cols['label']] == chn2_label]
-    # print(inf_chn1)
-    data = {
-        'type': inf_chn1[df_cols['type']].values[0],
-        'group': inf_chn1[df_cols['group']].values[0],
-        'label': bipolar_chn,
-        'x': (inf_chn1[df_cols['x']].values[0] + inf_chn2[df_cols['x']].values[0])/2,
-        'y': (inf_chn1[df_cols['y']].values[0] + inf_chn2[df_cols['y']].values[0])/2,
-        'z': (inf_chn1[df_cols['z']].values[0] + inf_chn2[df_cols['z']].values[0])/2
-    }
-    return data
+    # Only create bipolar channels with the closest or second closest electrode
+    if abs(int(channels_dict[dict_key][id])-int(channels_dict[dict_key][id+1])) <= 2:
+        # Bipolar channel label
+        bipolar_chn = dict_key+channels_dict[dict_key][id]+'-'+channels_dict[dict_key][id+1] 
+        # Channels' labels
+        chn1_label = dict_key+channels_dict[dict_key][id]
+        chn2_label = dict_key+channels_dict[dict_key][id+1]
+        # Extract positions
+        inf_chn1 = elec_pos.loc[elec_pos[df_cols['label']] == chn1_label]
+        inf_chn2 = elec_pos.loc[elec_pos[df_cols['label']] == chn2_label]
+        # print(inf_chn1)
+        data = {
+            'type': inf_chn1[df_cols['type']].values[0],
+            'group': inf_chn1[df_cols['group']].values[0],
+            'label': bipolar_chn,
+            'x': (inf_chn1[df_cols['x']].values[0] + inf_chn2[df_cols['x']].values[0])/2,
+            'y': (inf_chn1[df_cols['y']].values[0] + inf_chn2[df_cols['y']].values[0])/2,
+            'z': (inf_chn1[df_cols['z']].values[0] + inf_chn2[df_cols['z']].values[0])/2
+        }
+        return data
     
 
 # Function to create a bipolar channel list from 
-def create_bipolars(electrodes_df, processes, df_cols = None):
+def create_bipolars(electrodes_df, electrodes_edf, processes, df_cols = None):
     # df_cols (dict) = {type_record, label, x, y, z, group}
     # the dict can be in any order. The df will have the structure given
     # by the dict
@@ -70,18 +74,20 @@ def create_bipolars(electrodes_df, processes, df_cols = None):
             'z': 'z',
             'group': 'group',
         }
-    # print(df_cols['group'])
-    channels = dict((label,[]) for label in electrodes_df[df_cols['group']].unique())
+    channels = {}
     # Try to options of labels
     pattern1 = r'([A-Z0-9]+[-]+)(\d+)$' # for electrodes like 'LOpS-10' or 'LOpS1-10'
     pattern2 = r'([A-Z]+[-]*)(\d+)$' # for electrodes like 'LOpS10'
     # Extract channels info
     for electrode in electrodes_df[df_cols['label']].values:
-        match = re.match(pattern1, electrode, re.IGNORECASE)
-        if not match:
-            match = re.match(pattern2, electrode, re.IGNORECASE)
-        channels[match.group(1)].append(match.group(2))
-    # print(channels)
+        if electrode in electrodes_edf:
+            match = re.match(pattern1, electrode, re.IGNORECASE)
+            if not match:
+                match = re.match(pattern2, electrode, re.IGNORECASE)
+            if match.group(1) in channels.keys():
+                channels[match.group(1)].append(match.group(2))
+            else:
+                channels[match.group(1)] = [match.group(2)]
     # Create new list
     bipolar_list = []
     bipolar_info_dicts = []
@@ -95,9 +101,13 @@ def create_bipolars(electrodes_df, processes, df_cols = None):
                 bipolar_info_dicts = bipolar_info_dicts + pool.map(partial(bipolar_info, dict_key=key, channels_dict=channels,
                                                                            elec_pos=electrodes_df, df_cols=df_cols), 
                                                                    list(range(len(channels[key])-1)))
-        bipolar_elec = pd.DataFrame(columns=  list(df_cols.keys()))
-        data = pd.DataFrame(bipolar_info_dicts)
-        bipolar_elec = pd.concat([bipolar_elec, data], ignore_index=True)
+    # Remove None elements
+    bipolar_info_dicts = [element for element in bipolar_info_dicts if element is not None]
+    bipolar_list = [element for element in bipolar_list if element is not None]
+    # Convert dict to DataFrame
+    bipolar_elec = pd.DataFrame(columns=list(df_cols.keys()))
+    data = pd.DataFrame(bipolar_info_dicts)
+    bipolar_elec = pd.concat([bipolar_elec, data], ignore_index=True)
     return bipolar_list, bipolar_elec
 
 # Function to extract info from each channel
@@ -226,7 +236,7 @@ def extract_location(parc_path, noncon_to_con_tf_path, chn_info_df, df_cols):
     return df
 
 # Function to extract useful information from csv file
-def get_chn_info(csv_file, df_cols = None): #, conf = 'unipolar'
+def get_chn_info(csv_file, electrodes_edf, df_cols = None): #, conf = 'unipolar'
     df = pd.read_csv(csv_file, sep='\t')
     # df_cols (dict) = {type_record, label, x, y, z, group}
     # the dict can be in any order. The df will have the structure given
@@ -241,10 +251,18 @@ def get_chn_info(csv_file, df_cols = None): #, conf = 'unipolar'
             'group': 'group',
         }
     # print(list(df_cols.values()))
-    important_data = df[list(df_cols.values())].values
-    elec_df = pd.DataFrame(columns=  list(df_cols.keys()), data = important_data)
+    important_data = df[list(df_cols.values())]
+    important_data.reset_index() # make sure indexes pair with number of rows
+    elec_df = pd.DataFrame(columns=list(df_cols.keys()))
+    for index in range(len(important_data)):
+        if important_data.loc[index, df_cols['label']] in electrodes_edf:
+            tmp_df = pd.DataFrame([important_data.loc[index, list(df_cols.keys())].values], columns=list(df_cols.keys()))
+            elec_df = pd.concat([elec_df, tmp_df], axis=0)
+    del tmp_df
+    # reset index
+    elec_df = elec_df.reset_index(drop=True)
     # if conf == 'unipolar':
-    chn_list = df[df_cols['label']].values.tolist()
+    chn_list = elec_df[df_cols['label']].values.tolist()
     # elif conf == 'bipolar':
     #     # All the labels must be bipolar!!
     #     labels = df[df_cols['label']].values.tolist()
@@ -260,12 +278,15 @@ def get_chn_info(csv_file, df_cols = None): #, conf = 'unipolar'
         
 # Function to establish sampling rate of EDF file
 def get_srate_params(srate, max_srate=254): # max_srate=254 as uses int8
-    n_min = int(np.floor(srate/max_srate))
-    for i in range(n_min+1, int(srate/2)):
-        if srate % i == 0:
-            duration = 1/i
-            if len(str(duration).split(".")[1]) <= 4:
-                return 1/i, srate/i
+    # Convert sampling rate to integer
+    srates = [srate, int(srate)] # try first on srate, if not, on the int
+    for rate in srates:
+        n_min = int(np.floor(rate/max_srate))
+        for i in range(n_min+1, int(rate/2)):
+            if rate % i == 0:
+                duration = 1/i
+                if len(str(duration).split(".")[1]) <= 4:
+                    return 1/i, rate/i
     raise Exception('No appropriate parameters found in get_srate_params')
         
 # Function to create EDF file based in channel list
@@ -438,7 +459,6 @@ def create_epoch_EDF(edf_file, time_stamps, out_path, processes):
         with Pool(processes=processes) as pool2:
             channel_data = pool2.map(partial(extract_channel_epoch, edf_file=edf_file, 
                                             srate_data=srate, time_ids=t_ids), chn_lists)
-        
         # Edit headers to make them compliant with edf files
         for header in headers:
             header['physical_max'] = int(header['physical_max'])

@@ -64,7 +64,7 @@ def downsampling(chn, edf_file, orig_srate, target_srate):
     return signal_dsG, downsampledSrate
     
 
-def get_chn_positions(chn_csv_path, trsfPath=None):
+def get_chn_positions(chn_csv_path, electrodes_edf, trsfPath=None):
     """Creates dictionary with the position of each electrode.
     Parameters
     ----------
@@ -79,15 +79,16 @@ def get_chn_positions(chn_csv_path, trsfPath=None):
     chn_pos = {}
     for i in np.arange(len(elec_pos)):
         label = elec_pos.loc[[i], ['label']].values[0][0]
-        pos = elec_pos.loc[[i], ['x','y','z']].values[0]/1000
-        if trsfPath != None:
-            tfm = readRegMatrix(trsfPath)
-            pos = contrast_to_non_contrast(pos, tfm)
-        pos = pos.tolist()
-        chn_pos[label] = pos
+        if label in electrodes_edf:
+            pos = elec_pos.loc[[i], ['x','y','z']].values[0]/1000
+            if trsfPath != None:
+                tfm = readRegMatrix(trsfPath)
+                pos = contrast_to_non_contrast(pos, tfm)
+            pos = pos.tolist()
+            chn_pos[label] = pos
     return chn_pos
 
-def get_chn_labels(chn_csv_path):
+def get_chn_labels(chn_csv_path, electrodes_edf):
     """Gets label for each electrode.
     Parameters
     ----------
@@ -99,7 +100,9 @@ def get_chn_labels(chn_csv_path):
         
     """
     elec_info = pd.read_csv(chn_csv_path, sep='\t')
-    labels = elec_info['label'].values.tolist()
+    labels_csv = elec_info['label'].values.tolist()
+    # Filter to get only labels that are also in edf file
+    labels = [label for label in labels_csv if label in electrodes_edf]
     return labels
 
 def get_montage(ch_pos, subject, subjects_dir):

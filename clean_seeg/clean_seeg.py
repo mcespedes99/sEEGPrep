@@ -57,14 +57,16 @@ class cleanSEEG:
         import pyedflib
         import shutil
         import os
+        import re
         # Find indexes from events
         f = pyedflib.EdfReader(self.edf_path)
-        id = [value[0] for value in enumerate(f.readAnnotations()[2]) if value[1]==event_label] #TODO: change to regex
+        id = [value[0] for value in enumerate(f.readAnnotations()[2]) if re.match(event_label, value[1], re.IGNORECASE)]
         # Create df with annotations
         onset_list = f.readAnnotations()[0]
         f.close()
         # Find time stamps where the 'awake trigger' event is happening
         time_stamps = onset_list[id]
+        # print(time_stamps)
         # Copy file to local scratch if possible
         new_edf = None
         if tmpdir != None and os.path.exists(tmpdir):
@@ -104,8 +106,12 @@ class cleanSEEG:
         print('Running rereference')
         # Extract info about electrodes positions
         elec_pos = pd.read_csv(self.chn_csv_path, sep='\t')
+        # Extract channels present in edf file (might not be all)
+        edf = pyedflib.EdfReader(self.edf_path)
+        elec_edf = edf.getSignalLabels()
+        edf.close()
         # Create bipolar combinations
-        bipolar_channels, bipolar_info_df = create_bipolars(elec_pos, self.processes, df_cols = df_cols)
+        bipolar_channels, bipolar_info_df = create_bipolars(elec_pos, elec_edf, self.processes, df_cols = df_cols)
         # Save values in the class
         self.reref_chn_list = bipolar_channels
         self.reref_chn_df = bipolar_info_df
@@ -134,6 +140,7 @@ class cleanSEEG:
                          write_edf = False,
                          out_edf_path = None):
         import os
+        import pyedflib
         # Manage exception
         if self.chn_csv_path == None:
             raise Exception('Please indicate the path to a tsv file with channels information.')
@@ -152,11 +159,12 @@ class cleanSEEG:
             chn_list = self.reref_chn_list
         # Extract electrodes information if using not rereference results
         else:
-            # if conf==None:
-            #     raise Exception('Please indicate a proper configuration (unipolar/bipolar).')
             logging.info(f'Extracting channel positions from {self.chn_csv_path}')
-            chn_info_df, chn_list, df_cols = get_chn_info(self.chn_csv_path, df_cols = df_cols) #, conf=conf
-            # print(chn_list)
+            # First extract list of channels present in edf file
+            edf = pyedflib.EdfReader(self.edf_path)
+            elec_edf = edf.getSignalLabels()
+            edf.close()
+            chn_info_df, chn_list, df_cols = get_chn_info(self.chn_csv_path, elec_edf, df_cols = df_cols) #, conf=conf
         # Create tsv file with information about location of the channels
         df_location = extract_location(aparc_aseg_path, self.trsfPath, chn_info_df, df_cols)
         if write_tsv:
@@ -286,19 +294,18 @@ class cleanSEEG:
         if write_tsv and out_tsv_path==None:
             raise Exception('TSV file with noise information cannot be written without and appropiate out path')
         if self.chn_csv_path == None:
-            raise Exception('Please indicate the path to a tsv file with channels information.')
-        # Begin by getting the position of the electrodes in RAS space
-        chn_labels = get_chn_labels(self.chn_csv_path)
+            raise Exception('Please indicate the path to a tsv file with channels information.')\
         # Extract the labels and timestamps required
         labels, timestamps_epochs = get_orig_data(self.edf_path)
+        # Open edf file
+        edf_in = pyedflib.EdfReader(self.edf_path)
+        # Begin by getting the position of the electrodes in RAS space
+        elec_edf = edf_in.getSignalLabels()
+        chn_labels = get_chn_labels(self.chn_csv_path, elec_edf)
         # Defining start and end time of first epoch
         t_init = timestamps_epochs[0,0]
         t_end = timestamps_epochs[0,1]
-        # Open edf file
-        edf_in = pyedflib.EdfReader(self.edf_path)
         try:
-            # Sample rate
-            srate = edf_in.getSampleFrequencies()[0]/edf_in.datarecord_duration
             # Number of samples
             N=edf_in.getNSamples()[0]
             # Create time vector using srate
@@ -357,7 +364,8 @@ class cleanSEEG:
                 print('PLI removal completed.')
                 
                 # Second, identify noisy segments and highpass filter the data
-                clean_sig, interpolated, tmp_df = self.noiseDetect_raw(signal, t_init_id=t_init_id, 
+                clean_sig, interpolated, tmp_df = self.noiseDetect_raw(signal, elec_edf, 
+                                                                       t_init_id=t_init_id, 
                                                                        epoch_id=last_epoch, 
                                                                        return_interpolated=True,
                                                                        verbose = verbose)
@@ -417,8 +425,8 @@ class cleanSEEG:
             print(traceback.format_exc())
             raise Exception
     
-    def noiseDetect_raw(self, raw, t_init_id=0, epoch_id=0, return_interpolated=False, verbose=False):
-        import pyedflib
+    def noiseDetect_raw(self, raw, electrodes_edf, t_init_id=0, epoch_id=0, return_interpolated=False, verbose=False):
+        # electrodes_edf: list with channels present in edf file
         import numpy as np
         import pandas as pd
         import traceback
@@ -439,7 +447,7 @@ class cleanSEEG:
         #---------------Run automatic detection of noise using autoreject-------------------
         print('Running autoreject')
         # Begin by getting the position of the electrodes in RAS space
-        chn_pos = get_chn_positions(self.chn_csv_path, self.trsfPath)
+        chn_pos = get_chn_positions(self.chn_csv_path, electrodes_edf, self.trsfPath)
         # Channels to extract
         keys = list(chn_pos.keys())
         # Number of samples
@@ -449,8 +457,6 @@ class cleanSEEG:
 
         # Create sEEG montage
         montage = get_montage(chn_pos, self.subject, self.subjects_dir)
-        # Initiate clean signal
-        clean = np.array([]).reshape(len(keys),0)
         # Initiate csv epoch file
         cols = ['Epoch #', 'Start ID', 'End ID']+keys
         # Create MNE epochs

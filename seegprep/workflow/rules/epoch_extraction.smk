@@ -43,6 +43,7 @@ rule epochs:
     resources:
         mem_mb = 64000,
         storage_mb = get_edf_mb, # Indicate avail space using --resources storage_mb=750000
+        time = 180,
     benchmark:
        bids(
            root='benchmark',
