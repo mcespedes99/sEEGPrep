@@ -50,6 +50,7 @@ rule filter_data:
                 ),
     resources:
         mem_mb = 16000,
+    threads: 16
     benchmark:
        bids(
            root='benchmark',

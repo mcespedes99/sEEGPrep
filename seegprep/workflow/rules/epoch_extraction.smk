@@ -37,7 +37,7 @@ rule epochs:
                         **inputs.wildcards['ieeg']
                   )
     # This can be changed using --set-threads epochs=N. It acts as a balance between subject and channel parallelization.
-    threads: config['processes']
+    threads: 16
     group:
         "subj"
     resources:
