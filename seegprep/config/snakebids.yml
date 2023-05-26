@@ -87,8 +87,8 @@ pybids_inputs:
       - acquisition
       - task
       - run
-    # custom_path: '/home/mcesped/projects/ctb-akhanf/cfmm-bids/Khan/clinical_imaging/epi_iEEG/derivatives/atlasreg/sub-P{subject}/sub-P{subject}_desc-rigid_from-noncontrast_to-contrast_type-ras_xfm.txt'
-    custom_path: '/home/mcesped/projects/ctb-akhanf/cfmm-bids/Khan/clinical_imaging/epi_iEEG/derivatives/atlasreg/sub-P{subject}/sub-P{subject}_acq-noncontrast_desc-rigid_from-noncontrast_to-contrast_type-ras_xfm.txt'
+    custom_path: '/home/mcesped/projects/ctb-akhanf/cfmm-bids/Khan/clinical_imaging/epi_iEEG/derivatives/atlasreg/sub-P{subject}/sub-P{subject}_desc-rigid_from-noncontrast_to-contrast_type-ras_xfm.txt'
+    # custom_path: '/home/mcesped/projects/ctb-akhanf/cfmm-bids/Khan/clinical_imaging/epi_iEEG/derivatives/atlasreg/sub-P{subject}/sub-P{subject}_acq-noncontrast_desc-rigid_from-noncontrast_to-contrast_type-ras_xfm.txt'
 
 freesurf_dir: '/home/mcesped/projects/ctb-akhanf/cfmm-bids/Khan/clinical_imaging/epi_iEEG/derivatives/fastsurfer/'
 freesurf_patient_label: 'sub-P{subject}'
@@ -107,7 +107,7 @@ detrend_method: 'HighPass'
 
 # (2.b) Power line interference removal method
 # Options: 'Cleanline', 'Zapline', 'NotchFilter' (default), 'PLIremoval'
-methodPLI: 'Zapline'
+methodPLI: 'Cleanline'
 
 # (2.c) Electrical grid fundamental frequency
 # Default: 60 Hz  

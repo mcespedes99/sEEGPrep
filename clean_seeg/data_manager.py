@@ -399,27 +399,21 @@ def create_EDF(edf_file, out_path, processes, chn_labels=None, signal=None, n_re
 # Function to look for timestamps
 def extract_time_ids(epoch_id, time_vector, timestamps_array, srate):
     temp = np.asfortranarray(np.subtract(time_vector,timestamps_array[epoch_id]))
-    t_init_id = np.abs(temp).argmin() ## CANNOT BE ZERO, change to a not magic 
+    t_init_id = np.abs(temp).argmin() 
     t_end_id = int(np.floor(t_init_id+240*srate+1)) # 4 min = 240 s
     return (t_init_id, t_end_id)
 
 # Function to extract epochs
 def extract_channel_epoch(chn_number, edf_file, srate_data, time_ids):
     edf_in = pyedflib.EdfReader(edf_file)
-    chn_data = np.array([], dtype=float)
-    for t_id in time_ids:
-        n_val = t_id[1]-t_id[0]
-        signal = edf_in.readSignal(chn_number, start=t_id[0], n=n_val)
-        chn_data = np.hstack([chn_data, 
-                            signal, 
-                            np.zeros(int(60*srate_data))])
+    n_val = time_ids[1]-time_ids[0]
+    signal = edf_in.readSignal(chn_number, start=time_ids[0], n=n_val)
     # Deallocate space in memory
     edf_in.close()
-    del signal
-    return chn_data
+    return signal
 
 # Function to create epochs and EDF file from them
-def create_epoch_EDF(edf_file, time_stamps, out_path, processes):
+def create_epoch_EDF(edf_file, timestamp, out_path, processes):
     try:
         edf_in = pyedflib.EdfReader(edf_file)
         # First import labels
@@ -438,23 +432,19 @@ def create_epoch_EDF(edf_file, time_stamps, out_path, processes):
         N = edf_in.getNSamples()[0]
         # Time vector:
         t = np.arange(0, N)/srate
-        # Relative initial time for epochs
-        t_0 = t[np.abs(np.subtract(t,time_stamps[0])).argmin()]
+        # Time ids
+        t_init_id = np.abs(np.subtract(t,timestamp)).argmin()
+        t_end_id = int(np.floor(t_init_id+240*srate+1)) # TODO: customizable
+        t_ids = (t_init_id, t_end_id)
+        # Relative initial time for epoch
+        t_0 = t[np.abs(np.subtract(t,timestamp)).argmin()]
         edf_out.writeAnnotation(0, -1, "Recording starts")
         # Headers for unipolar case
         headers = edf_in.getSignalHeaders()
         # Close file
         edf_in.close()
-        # Create time ids
-        list_epochs_ids = list(range(time_stamps.size))
         # Extract channel information:
         chn_lists = range(len(labels))
-        # chn_lists = range(len(bipolar_channels)) #for bipolar
-        # Extracting time indexes based on time stamps
-        with Pool(processes=processes) as pool:
-            t_ids = pool.map(partial(extract_time_ids, time_vector=t, timestamps_array=time_stamps, srate=srate), 
-                            list_epochs_ids)
-        print('Channel part')
         # Unipolar case:
         with Pool(processes=processes) as pool2:
             channel_data = pool2.map(partial(extract_channel_epoch, edf_file=edf_file, 
@@ -470,12 +460,9 @@ def create_epoch_EDF(edf_file, time_stamps, out_path, processes):
         
         edf_out.setSignalHeaders(headers)
         edf_out.writeSamples(channel_data)
-        print('Time part')
-        # Write annotations at the different epochs times (beginning and end of epochs)
-        for id, (t_init_id, t_end_id) in enumerate(t_ids):
-            # Write annotations
-            edf_out.writeAnnotation(t[t_init_id]-t_0, -1, f"Epoch #{id+1} starts.")
-            edf_out.writeAnnotation(t[t_end_id]-t_0, -1, f"Epoch #{id+1} ends.")
+        # Write annotations
+        edf_out.writeAnnotation(t[t_init_id]-t_0, -1, f"Epoch starts.")
+        edf_out.writeAnnotation(t[t_end_id]-t_0, -1, f"Epoch ends.")
         # Deallocate space in memory
         del t
         edf_out.close()

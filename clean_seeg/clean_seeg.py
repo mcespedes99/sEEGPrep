@@ -52,12 +52,15 @@ class cleanSEEG:
     # Epoch extraction
     def extract_epochs(self,
                        event_label,
-                       out_edf_path,
-                       tmpdir):
+                       out_root = None,
+                       out_files = None,
+                       tmpdir = None):
         import pyedflib
         import shutil
         import os
         import re
+        import snakebids
+        import bids
         # Find indexes from events
         f = pyedflib.EdfReader(self.edf_path)
         id = [value[0] for value in enumerate(f.readAnnotations()[2]) if re.match(event_label, value[1], re.IGNORECASE)]
@@ -76,12 +79,31 @@ class cleanSEEG:
             new_edf = os.path.join(tmpdir,file_name)
             shutil.copy(self.edf_path, new_edf)
         
+        # Extract entities from input path
+        entities = bids.layout.parse_file_entities(self.edf_path)
+        # Combine 'extension' with 'suffix' and delete the first one
+        entities['suffix'] = entities['suffix']+entities['extension']
+        del entities['extension']
+        # Add 'task'
+        entities['task'] = 'clipping'
         # Here call function to create new EDF file
-        if (new_edf == None):
-            create_epoch_EDF(self.edf_path, time_stamps, out_edf_path, self.processes)
-        else:
-            print('aqui')
-            create_epoch_EDF(new_edf, time_stamps, out_edf_path, self.processes)
+        for index, event_timestamp in enumerate(time_stamps):
+            if out_files == None:
+                # New file name 
+                entities['clip'] = f'{index+1:02}'
+                out_edf_path = os.path.basename(snakebids.bids(root=out_root, **entities))
+                out_edf_path = os.path.join(out_root, out_edf_path)
+                print(out_edf_path)
+            else:
+                # Filter based on regex
+                reg = re.compile(f'clip-{index+1:02}')
+                out_edf_path = list(filter(reg.search, out_files))[0]
+            if (new_edf == None):
+                create_epoch_EDF(self.edf_path, event_timestamp, out_edf_path, self.processes)
+            else:
+                print('aqui')
+                create_epoch_EDF(new_edf, event_timestamp, out_edf_path, self.processes)
+        if new_edf != None:
             print('delete')
             os.remove(new_edf)
 
@@ -197,7 +219,8 @@ class cleanSEEG:
     def downsample(self,
                    target_srate,
                    write_edf = False,
-                   out_edf_path = None):
+                   out_edf_path = None,
+                   epoch_edf = False):
         import pyedflib
         from multiprocessing.pool import Pool
         from multiprocessing import get_context
