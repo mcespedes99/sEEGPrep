@@ -4,6 +4,7 @@ import snakebids
 from snakebids import bids
 from os.path import join
 import pandas as pd
+import numpy as np
 
 configfile: workflow.source_path('../config/snakebids.yml')
 
@@ -38,24 +39,22 @@ def get_inputs(input_path, **zip_lists):
         # Also save in list to use it in the filtering (an ordered list is needed)
         list_wildcards_vals.append(tmp_tuple)
 
-    # Create remove set
-    remove_set = set()
+    # Create filter list
+    out_wildcards_vals = []
     # Check annotation files to filter inputs
     for idx, annot_file in enumerate(annot_files):
         # Open annotation file to check if any event is in the data
         annot = pd.read_csv(annot_file, sep='\t')
         # Find time stamps indexes where the 'awake trigger' event is happening
         # returns True on all the indexes if no event is found
-        cond = ~annot['event'].str.contains('awake trigger', case=False, na=False)
-        # If no event is found, then add to remove set
-        if cond.all():
-            remove_set.add(list_wildcards_vals[idx])
-    # Get filtered values
-    out_wildcards_vals = set_wildcards_vals-remove_set
+        instances = annot['event'].str.contains('awake trigger', case=False, na=False)
+        # Add specific amount of wildcards depending on the number of instances found
+        n = np.count_nonzero(instances)
+        out_wildcards_vals += [list_wildcards_vals[idx]+tuple([f'{number:02}']) for number in np.arange(1,n+1)]
 
     # First get dict keys
-    out_ziplist_keys = list(zip_lists.keys())
-    # Convert the set to list of lists
+    out_ziplist_keys = list(zip_lists.keys())+['clip']
+    # Convert the list of tuples of wc combinations to list of wc lists (separated)
     out_ziplist_vals = []
     for key_id in range(len(out_ziplist_keys)):
         out_ziplist_vals.append([tuple_val[key_id] for tuple_val in out_wildcards_vals])
@@ -79,6 +78,10 @@ if config['epoch'] or config['run_all'] or run_all:
     input_ziplist = get_inputs(inputs.path['annotations'], **inputs.zip_lists['annotations'])
 else:
     input_ziplist = inputs.zip_lists['ieeg']
+
+# Add clip to wildcards of outputs
+print(input_ziplist)
+inputs.wildcards['out_edf']['clip']= '{clip}'
 
 #---- end snakebids boilerplate -----------------------------------------------
 ## Epoch extraction rule

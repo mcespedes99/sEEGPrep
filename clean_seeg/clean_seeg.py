@@ -3,7 +3,7 @@ from .clean_autoreject import create_mne_epochs, run_autoreject
 from .clean_drifts import clean_drifts
 from .clean_flatlines import clean_flatlines
 from .clean_PLI import removePLI_chns, zapline, cleanline, notch_filt
-from .data_manager import create_EDF, create_bipolars, extract_location, apply_bipolar_criteria, get_chn_info, create_epoch_EDF
+from .data_manager import create_EDF, create_bipolars, extract_location, apply_bipolar_criteria, get_chn_info, create_epoch_EDF, create_epoch_EDF2 
 import logging
 
 class cleanSEEG:
@@ -61,6 +61,7 @@ class cleanSEEG:
         import re
         import snakebids
         import bids
+        import numpy as np
         # Find indexes from events
         f = pyedflib.EdfReader(self.edf_path)
         id = [value[0] for value in enumerate(f.readAnnotations()[2]) if re.match(event_label, value[1], re.IGNORECASE)]
@@ -257,9 +258,59 @@ class cleanSEEG:
             self.downsample_edf = out_edf_path
         return data_dnsampled, newSrate[0]
     
+    # Function to reject PLI
+    def reject_PLI(self, 
+                   write_edf = False,
+                   out_edf_path = None):
+        import pyedflib
+        import numpy as np
+        import traceback
+        import os
+        # Manage a few exceptions:
+        if write_edf and out_edf_path==None:
+            raise Exception('EDF file with clean signal cannot be written without and appropiate out path')
+        # Open edf file
+        edf_in = pyedflib.EdfReader(self.edf_path)
+        # Extract labels
+        labels = edf_in.getSignalLabels()
+        # Begin by getting the position of the electrodes in RAS space
+        elec_edf = edf_in.getSignalLabels()
+        chn_labels = get_chn_labels(self.chn_csv_path, elec_edf)
+        try:
+            # Number of samples
+            N=edf_in.getNSamples()[0]
+            # Create signal list
+            signal = []
+            # Extract signal per channel
+            for chan in chn_labels:
+                id_ch = labels.index(chan)
+                chn_sig = edf_in.readSignal(id_ch)
+                signal.append(chn_sig)
+            edf_in.close()
+            # Convert signal to array
+            signal = np.vstack(signal)
+            # Remove line noise
+            print('Removing line noise')
+            clean = self.wrapper_PLI(signal)
+            print('PLI removal completed.')
+            # Write edfs if requested
+            if write_edf:
+                # Clean signal
+                # convert to list
+                clean_list = [clean[i,:] for i in range(clean.shape[0])]
+                if os.path.exists(out_edf_path):
+                    logging.warning(f"EDF file {out_edf_path} will be overwritten.")
+                create_EDF(self.edf_path, out_edf_path, self.processes, chn_labels = chn_labels, signal = clean_list)
+                del clean_list
+                self.clean_edf = out_edf_path
+            return clean
+        except:
+            edf_in.close()
+            print(traceback.format_exc())
+            raise Exception
     
-    
-    def clean_PLI(self, signal):
+    # Wrapper to manage different PLI methods
+    def wrapper_PLI(self, signal):
         if self.methodPLI == 'Cleanline':
             signal = cleanline(signal.T, self.srate, processes = self.processes, bandwidth=self.bandwidth)
         elif self.methodPLI == 'Zapline':
@@ -318,95 +369,53 @@ class cleanSEEG:
             raise Exception('TSV file with noise information cannot be written without and appropiate out path')
         if self.chn_csv_path == None:
             raise Exception('Please indicate the path to a tsv file with channels information.')\
-        # Extract the labels and timestamps required
-        labels, timestamps_epochs = get_orig_data(self.edf_path)
         # Open edf file
         edf_in = pyedflib.EdfReader(self.edf_path)
+        # Extract labels
+        labels = edf_in.getSignalLabels()
         # Begin by getting the position of the electrodes in RAS space
         elec_edf = edf_in.getSignalLabels()
         chn_labels = get_chn_labels(self.chn_csv_path, elec_edf)
-        # Defining start and end time of first epoch
-        t_init = timestamps_epochs[0,0]
-        t_end = timestamps_epochs[0,1]
         try:
             # Number of samples
             N=edf_in.getNSamples()[0]
-            # Create time vector using srate
-            t = np.arange(0, N)/self.srate
             ### THIS MUST BE CHANGED TO A MORE STANDARD APPROACH
             # Define length of epochs based on the first one
-            t_init_id = np.argmin((np.abs(t-t_init)))
-            t_end_id = np.argmin((np.abs(t-t_end)))
-            samples_epoch = t_end_id-t_init_id
-            print(samples_epoch)
-            # Initiate clean signal
-            clean = np.array([]).reshape(len(chn_labels),0)
-            # Initiate interpolated signal if necessary
-            interpolated_sig = np.array([]).reshape(len(chn_labels),0)
+            # t_init_id = np.argmin((np.abs(t-t_init)))
+            # t_end_id = np.argmin((np.abs(t-t_end)))
+            # samples_epoch = t_end_id-t_init_id
+            # print(samples_epoch)
             # Initiate csv epoch file
             cols = ['Epoch #', 'Start ID', 'End ID']+chn_labels
             df_epochs = pd.DataFrame(columns=cols)
-            # Last epoch number
-            last_epoch = 1
-            # Run the algorithm per epoch
-            n_epochs = timestamps_epochs.shape[0]
             # Count of removed elements per epoch
             n_removed = [0] 
             # Initialize in 0 as per epoch, the start id will be n_orig[id]-n_removed[id] and the end id: n_orig[id]-n_removed[id+1]
             # Example: if 10 elements were removed in the first epoch and 12 in the 2nd, then the start id of the second should be 
             # the original one minus 10 but the end should be the original minus 22
-            for epoch_id in np.arange(n_epochs):
-                t_init = timestamps_epochs[epoch_id,0]
-                # Find idx for t_init
-                t_init_id = np.argmin((np.abs(t-t_init)))
-                # Find init for next epoch
-                if epoch_id < n_epochs-1:
-                    t_init_next = timestamps_epochs[epoch_id+1,0]
-                    t_init_next_id = np.argmin((np.abs(t-t_init_next)))
-                else:
-                    t_init_next_id = N
-                # Create signal for that epoch
-                signal = np.array([], dtype=np.int64).reshape(0,samples_epoch)
-                # Part of the signal not cleaned (zero padded)
-                n_not_clean = t_init_next_id - (t_init_id+samples_epoch)
-                signal_not_clean = np.array([], dtype=np.int64).reshape(0,n_not_clean)
-                # Extract signal per channel
-                for chan in chn_labels:
-                    id_ch = labels.index(chan)
-                    n_extract = t_init_next_id - t_init_id
-                    chn_sig = edf_in.readSignal(id_ch, start = t_init_id, n = n_extract)
-                    chn_sig_epoch = chn_sig[0:samples_epoch]
-                    signal = np.vstack([signal, chn_sig_epoch])
-                    signal_not_clean = np.vstack([signal_not_clean, chn_sig[samples_epoch:]])
-                edf_in.close()
-
-                # Run cleaning
-                # First remove line noise
-                print('Removing line noise')
-                signal = self.clean_PLI(signal)
-                print('PLI removal completed.')
-                
-                # Second, identify noisy segments and highpass filter the data
-                clean_sig, interpolated, tmp_df = self.noiseDetect_raw(signal, elec_edf, 
-                                                                       t_init_id=t_init_id, 
-                                                                       epoch_id=last_epoch, 
-                                                                       return_interpolated=True,
-                                                                       verbose = verbose)
-                # Attach the non-clean part of the signal
-                clean_sig = np.hstack([clean_sig, signal_not_clean])
-                interpolated = np.hstack([interpolated, signal_not_clean])
-                print(clean_sig.shape)
-                
-                # Update clean signal
-                clean = np.hstack([clean, clean_sig])
-                # Update interpolated signal
-                interpolated_sig = np.hstack([interpolated_sig, interpolated])
-                # Update number of removed elements after autoreject
-                n_removed.append(clean.shape[-1]-interpolated_sig.shape[-1])
-                # Update output df
-                df_epochs = pd.concat([df_epochs, tmp_df])
-                # Epochs #s
-                last_epoch = last_epoch+len(tmp_df.index)
+            # Create signal list
+            signal = []
+            # Extract signal per channel
+            for chan in chn_labels:
+                id_ch = labels.index(chan)
+                chn_sig = edf_in.readSignal(id_ch)
+                signal.append(chn_sig)
+            edf_in.close()
+            # Convert signal to array
+            signal = np.vstack(signal)
+            # Run cleaning
+            # First remove line noise
+            # print('Removing line noise')
+            # signal = self.wrapper_PLI(signal)
+            # print('PLI removal completed.')
+            
+            # Second, identify noisy segments and highpass filter the data
+            clean, interpolated, df_epochs = self.noiseDetect_raw(signal, elec_edf, 
+                                                                    return_interpolated=True,
+                                                                    verbose = verbose)
+            
+            # Update number of removed elements after autoreject
+            n_removed.append(clean.shape[-1]-interpolated.shape[-1])
 
             # Write edfs if requested
             if write_edf_clean:
@@ -438,7 +447,7 @@ class cleanSEEG:
             
             # Return 
             if self.noiseDetect and return_interpolated:
-                return clean, interpolated_sig, df_epochs
+                return clean, interpolated, df_epochs
             elif self.noiseDetect:
                 return clean, df_epochs
             # Else, just return the filtered signal
@@ -448,7 +457,7 @@ class cleanSEEG:
             print(traceback.format_exc())
             raise Exception
     
-    def noiseDetect_raw(self, raw, electrodes_edf, t_init_id=0, epoch_id=0, return_interpolated=False, verbose=False):
+    def noiseDetect_raw(self, raw, electrodes_edf, return_interpolated=False, verbose=False):
         # electrodes_edf: list with channels present in edf file
         import numpy as np
         import pandas as pd
@@ -485,8 +494,8 @@ class cleanSEEG:
         # Create MNE epochs
         mne_epochs, epochs_ids, n_missed = create_mne_epochs(raw, keys, self.srate, montage, self.epoch_autoreject)
         # Update IDs
-        start_IDs = epochs_ids['Start ID']+t_init_id
-        end_IDs = epochs_ids['End ID']+t_init_id
+        start_IDs = epochs_ids['Start ID']
+        end_IDs = epochs_ids['End ID']
 
         # Run autoreject
         epochs_ar, noise_labels = run_autoreject(mne_epochs, verbose = verbose)
@@ -494,7 +503,7 @@ class cleanSEEG:
         # Start-end IDs for each epoch
         IDs_array = np.array([start_IDs,end_IDs]).T
         # Epoch numbering
-        epoch_num = np.arange(epoch_id, epoch_id+len(start_IDs))
+        epoch_num = np.arange(1, 1+len(start_IDs))
         noise_array = np.c_[epoch_num, IDs_array, noise_labels]
         df_epochs = pd.DataFrame(data = noise_array, columns = cols)
 

@@ -637,7 +637,7 @@ def removeLinesMovingWindow(channel, data, fPassBand, srate, bandwidth, linefreq
     # Output:
     #       data           Cleaned up data
     #
-    print(channel)
+    # print(channel)
     data = np.copy(data[:,channel])
     # Window,overlap and frequency information
     if data.ndim == 1:
