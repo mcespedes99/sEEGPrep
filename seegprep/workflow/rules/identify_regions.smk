@@ -13,6 +13,9 @@ def region_id_inputs():
     elif config['downsample']:
         #print('filter before regionsID')
         return rules.downsample.output.out_edf, inputs.path['seega_tsv']
+    # Else if filter is executed after epoch extraction
+    elif config['epoch']:
+        return rules.get_epoch_files.output.out_edf
     # Else if regionsID is called but not any of the previous rules
     elif config['regions_id']:
         #print('RegionsID is first')
@@ -50,14 +53,15 @@ rule identify_regions:
         out_edf = bids(
                         root='bids',
                         datatype='ieeg',
-                        suffix='clean.edf',
-                        **inputs.wildcards['ieeg']
+                        suffix='ieeg.edf',
+                        rec='regionID',
+                        **out_edf_wc
                 ),
         out_tsv = bids(
                         root='bids',
                         datatype='ieeg',
                         suffix='regions_native_space.tsv',
-                        **inputs.wildcards['ieeg']
+                        **out_edf_wc
                 ),
     resources:
         mem_mb = 16000,
@@ -66,12 +70,12 @@ rule identify_regions:
        bids(
            root='benchmark',
            suffix='benchmarkRegionID.txt',
-           **inputs.wildcards['ieeg']
+           **out_edf_wc
        ),
     log:
         bids(
             root='logs',
             suffix='identify_regions.log',
-            **inputs.wildcards['ieeg']
+            **out_edf_wc
         )
     script: join(workflow.basedir,'scripts/identify_regions.py')

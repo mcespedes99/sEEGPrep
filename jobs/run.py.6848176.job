@@ -1,0 +1,16 @@
+#!/bin/bash
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=1
+#SBATCH --mem=4000
+#SBATCH --time=24:00:00
+#SBATCH --job-name=run.py
+#SBATCH --account=ctb-akhanf
+#SBATCH --output=/scratch/mcesped/code/sEEGPrep/jobs/run.py.%A.out
+echo CMD: /scratch/mcesped/code/sEEGPrep/seegprep/seegprep/run.py /home/mcesped/projects/ctb-akhanf/cfmm-bids/Khan/epi_iEEG/ieeg /home/mcesped/scratch/code/sEEGPrep/Results/run_all_Cleanline/ participant --participant-label 112 --epoch --resources storage_mb=750000 --profile cc-slurm
+echo START_TIME: `date`
+cd /home/mcesped/scratch/code/sEEGPrep
+/scratch/mcesped/code/sEEGPrep/seegprep/seegprep/run.py /home/mcesped/projects/ctb-akhanf/cfmm-bids/Khan/epi_iEEG/ieeg /home/mcesped/scratch/code/sEEGPrep/Results/run_all_Cleanline/ participant --participant-label 112 --epoch --resources storage_mb=750000 --profile cc-slurm
+RETURNVAL=$?
+echo RETURNVAL=$RETURNVAL
+echo END_TIME: `date`
+exit $RETURNVAL

@@ -5,6 +5,7 @@ from snakebids import bids
 from os.path import join
 import pandas as pd
 import numpy as np
+import copy
 
 configfile: workflow.source_path('../config/snakebids.yml')
 
@@ -38,7 +39,12 @@ def get_inputs(input_path, **zip_lists):
         set_wildcards_vals.add(tmp_tuple)
         # Also save in list to use it in the filtering (an ordered list is needed)
         list_wildcards_vals.append(tmp_tuple)
-
+    
+    # Save number of clips per session/subject
+    input_keys = list(zip_lists.keys())
+    subj_id = input_keys.index('subject')
+    ses_id = input_keys.index('session')
+    number_clips = {}
     # Create filter list
     out_wildcards_vals = []
     # Check annotation files to filter inputs
@@ -50,17 +56,27 @@ def get_inputs(input_path, **zip_lists):
         instances = annot['event'].str.contains('awake trigger', case=False, na=False)
         # Add specific amount of wildcards depending on the number of instances found
         n = np.count_nonzero(instances)
-        out_wildcards_vals += [list_wildcards_vals[idx]+tuple([f'{number:02}']) for number in np.arange(1,n+1)]
-
+        out_wildcards_vals += [list_wildcards_vals[idx] + tuple([f'{number:02}']) for number in np.arange(1,n+1)]
+        # Save number of clips
+        subj_identifier = f'subj_{list_wildcards_vals[idx][subj_id]}'
+        ses_identifier = f'ses_{list_wildcards_vals[idx][ses_id]}'
+        if subj_identifier in number_clips:
+            if ses_identifier in number_clips[subj_identifier]:
+                number_clips[subj_identifier][ses_identifier] = max(number_clips[subj_identifier][ses_identifier], n)
+            else:
+                number_clips[subj_identifier][ses_identifier] = n
+        else:
+            number_clips[subj_identifier] = {ses_identifier: n}
+    
     # First get dict keys
-    out_ziplist_keys = list(zip_lists.keys())+['clip']
+    out_ziplist_keys = list(zip_lists.keys()) +['clip']
     # Convert the list of tuples of wc combinations to list of wc lists (separated)
     out_ziplist_vals = []
     for key_id in range(len(out_ziplist_keys)):
         out_ziplist_vals.append([tuple_val[key_id] for tuple_val in out_wildcards_vals])
     # Construct dictionary
     out_ziplist = dict(zip(out_ziplist_keys, out_ziplist_vals))
-    return out_ziplist
+    return out_ziplist, number_clips
 
 #this adds constraints to the bids naming
 wildcard_constraints:  **snakebids.get_wildcard_constraints(config['pybids_inputs'])
@@ -75,15 +91,16 @@ if (not config['run_all']) and (not config['epoch']) and (not config['downsample
 ## Input definition
 if config['epoch'] or config['run_all'] or run_all:
     # Get filtered ziplist based on annotations of interest if extracting epochs
-    input_ziplist = get_inputs(inputs.path['annotations'], **inputs.zip_lists['annotations'])
+    input_ziplist, number_clips = get_inputs(inputs.path['annotations'], **inputs.zip_lists['annotations'])
+    # Add clip and rec to wildcards of outputs
+    out_edf_wc = copy.deepcopy(inputs.wildcards['ieeg'])
+    out_edf_wc['clip'] = '{clip}'
 else:
     input_ziplist = inputs.zip_lists['ieeg']
-
-# Add clip to wildcards of outputs
-print(input_ziplist)
-inputs.wildcards['out_edf']['clip']= '{clip}'
+    out_edf_wc = inputs.wildcards['ieeg']
 
 #---- end snakebids boilerplate -----------------------------------------------
+localrules: all, get_epoch_files
 ## Epoch extraction rule
 if config['epoch'] or config['run_all'] or run_all:
     include: "rules/epoch_extraction.smk"
@@ -126,7 +143,7 @@ def define_all_inputs():
         return rules.downsample.output
     # Else if epoch extraction is the last step
     elif config['epoch']:
-        return rules.epochs.output
+        return rules.get_epoch_files.output
     # Else: default case run_all
     else:
         # print('hola')

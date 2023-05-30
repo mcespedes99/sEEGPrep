@@ -3,7 +3,7 @@ from .clean_autoreject import create_mne_epochs, run_autoreject
 from .clean_drifts import clean_drifts
 from .clean_flatlines import clean_flatlines
 from .clean_PLI import removePLI_chns, zapline, cleanline, notch_filt
-from .data_manager import create_EDF, create_bipolars, extract_location, apply_bipolar_criteria, get_chn_info, create_epoch_EDF, create_epoch_EDF2 
+from .data_manager import create_EDF, create_bipolars, extract_location, apply_bipolar_criteria, get_chn_info, create_epoch_EDF 
 import logging
 
 class cleanSEEG:
@@ -54,7 +54,8 @@ class cleanSEEG:
                        event_label,
                        out_root = None,
                        out_files = None,
-                       tmpdir = None):
+                       tmpdir = None,
+                       snakemake = False):
         import pyedflib
         import shutil
         import os
@@ -83,10 +84,13 @@ class cleanSEEG:
         # Extract entities from input path
         entities = bids.layout.parse_file_entities(self.edf_path)
         # Combine 'extension' with 'suffix' and delete the first one
-        entities['suffix'] = entities['suffix']+entities['extension']
+        if snakemake:
+            entities['suffix'] = 'ieeg_tmp.edf'
+        else:
+            entities['suffix'] = 'ieeg.edf'
         del entities['extension']
         # Add 'task'
-        entities['task'] = 'clipping'
+        entities['rec'] = 'clip'
         # Here call function to create new EDF file
         for index, event_timestamp in enumerate(time_stamps):
             if out_files == None:

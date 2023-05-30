@@ -17,6 +17,9 @@ def reref_inputs():
     elif config['downsample']:
         #print('downsample before reref')
         return rules.downsample.output.out_edf
+    # Else if reref is executed after epoch extraction
+    elif config['epoch']:
+        return rules.get_epoch_files.output.out_edf
     # Else if rereference is called but not any of the previous rules
     elif config['rereference']:
         #print('Reref is first')
@@ -37,14 +40,15 @@ rule rereference:
         out_edf = bids(
                         root=out_dir_reref(),
                         datatype='ieeg',
-                        suffix='rereferenced.edf',
-                        **inputs.wildcards['ieeg']
+                        suffix='ieeg.edf',
+                        rec='reref',
+                        **out_edf_wc
                 ),
         out_tsv = bids(
                         root=out_dir_reref(),
                         datatype='ieeg',
                         suffix='reref_native_space.tsv',
-                        **inputs.wildcards['ieeg']
+                        **out_edf_wc
                 ),
     resources:
         mem_mb = 16000,
@@ -53,12 +57,12 @@ rule rereference:
        bids(
            root='benchmark',
            suffix='benchmarkReref.txt',
-           **inputs.wildcards['ieeg']
+           **out_edf_wc
        ),
     log:
         bids(
             root='logs',
             suffix='rereferencing.log',
-            **inputs.wildcards['ieeg']
+            **out_edf_wc
         )
     script: join(workflow.basedir,'scripts/rereference_signal.py')

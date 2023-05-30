@@ -13,6 +13,9 @@ def filter_inputs():
     if config['run_all'] or config['downsample']:
         #print('downsample before filter')
         return rules.downsample.output.out_edf
+    # Else if filter is executed after epoch extraction
+    elif config['epoch']:
+        return rules.get_epoch_files.output.out_edf
     # Else if filter is the first step to execute
     elif config['filter']:
         #print('filter is first')
@@ -39,14 +42,15 @@ rule filter_data:
         out_edf = bids(
                         root=out_dir_filt(),
                         datatype='ieeg',
-                        suffix='filtered.edf',
-                        **inputs.wildcards['ieeg']
+                        suffix='ieeg.edf',
+                        rec='noise_reject',
+                        **out_edf_wc
                 ),
         out_tsv = bids(
                         root='bids',
                         datatype='ieeg',
                         suffix='noisy_data.tsv',
-                        **inputs.wildcards['ieeg']
+                        **out_edf_wc
                 ),
     resources:
         mem_mb = 16000,
@@ -55,12 +59,12 @@ rule filter_data:
        bids(
            root='benchmark',
            suffix='benchmarkFilter.txt',
-           **inputs.wildcards['ieeg']
+           **out_edf_wc
        ),
     log:
         bids(
             root='logs',
             suffix='filtering.log',
-            **inputs.wildcards['ieeg']
+            **out_edf_wc
         )
     script: join(workflow.basedir,'scripts/filter_signal.py')

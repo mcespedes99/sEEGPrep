@@ -13,7 +13,7 @@ def dn_inputs():
     # If run_all or epochs are called
     if config['run_all'] or config['epoch']:
         #print('epochs before downsample')
-        return rules.epochs.output.out_edf
+        return rules.get_epoch_files.output.out_edf
     # Else if downsample is the first step to execute
     elif config['downsample']:
         #print('downsample is first')
@@ -34,8 +34,9 @@ rule downsample:
         out_edf = bids(
                         root=out_dir_dn(),
                         datatype='ieeg',
-                        suffix='downsampled.edf',
-                        **inputs.wildcards['ieeg']
+                        suffix='ieeg.edf',
+                        rec='dn',
+                        **out_edf_wc
                   )
     resources:
         mem_mb = 16000,
@@ -44,12 +45,12 @@ rule downsample:
        bids(
            root='benchmark',
            suffix='benchmarkDN.txt',
-           **inputs.wildcards['ieeg']
+           **out_edf_wc
        ),
     log:
         bids(
             root='logs',
             suffix='downsampling.log',
-            **inputs.wildcards['ieeg']
+            **out_edf_wc
         )
     script: join(workflow.basedir,'scripts/downsample_signal.py')

@@ -40,19 +40,6 @@ pybids_inputs:
       - task
       - run
   
-  out_edf:
-    filters:
-      suffix: 'ieeg'
-      extension: '.edf'
-      datatype: 'ieeg'
-    wildcards:
-      - subject
-      - session
-      - acquisition
-      - task
-      - run
-      - clip
-  
   annotations:
     filters:
       suffix: 'annotations'

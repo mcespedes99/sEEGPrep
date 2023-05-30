@@ -11,8 +11,8 @@ import re
 import pandas as pd
 import nibabel as nb
 import mne
-from EDFlib.edfreader import EDFreader
-from EDFlib.edfwriter import EDFwriter
+# from EDFlib.edfreader import EDFreader
+# from EDFlib.edfwriter import EDFwriter
 import sys
 
 # Function to create bipolar channels from given unipolars
@@ -436,11 +436,13 @@ def create_epoch_EDF(edf_file, timestamp, out_path, processes):
         # Build epochs
         N = edf_in.getNSamples()[0]
         # Time vector:
-        t = np.arange(0, N)/srate
+        t = np.arange(0, N+1)/srate
+        # The plus 1 is required since the t[id] indicates start points.
         # Time ids
         t_init_id = np.abs(np.subtract(t,timestamp)).argmin()
         t_end_id = int(np.floor(t_init_id+240*srate)) # TODO: customizable
-        t_end_id = int(t_end_id - t_end_id%edf_in.getSampleFrequencies()[0])
+        n_val = t_end_id-t_end_id
+        t_end_id = int(t_end_id - n_val%edf_in.getSampleFrequencies()[0])
         t_ids = (t_init_id, t_end_id)
         # Relative initial time for epoch
         t_0 = t[np.abs(np.subtract(t,timestamp)).argmin()]
@@ -468,7 +470,9 @@ def create_epoch_EDF(edf_file, timestamp, out_path, processes):
         edf_out.writeSamples(channel_data)
         # Write annotations
         edf_out.writeAnnotation(t[t_init_id]-t_0, -1, f"Epoch starts.")
-        edf_out.writeAnnotation(t[t_end_id]-t_0, -1, f"Epoch ends.")
+        edf_out.writeAnnotation(t[t_end_id+1]-t_0, -1, f"Epoch ends.")
+        # The plus 1 is required since the t[id] indicates start points, for the end epoch, 
+        # we want the final of the last datarecord!
         # Deallocate space in memory
         del t
         edf_out.close()
@@ -478,121 +482,121 @@ def create_epoch_EDF(edf_file, timestamp, out_path, processes):
         edf_in.close()
 
 
-# Function to extract epochs
-def extract_channel_epoch2(chn_number, edf_file, timestamp):
-    edf_in = EDFreader(edf_file)
-    # Sampling rate: based on channel 
-    srate = edf_in.getSampleFrequency(chn_number)
-    # Build epochs
-    N = edf_in.getTotalSamples(chn_number)
-    # Time vector:
-    t = np.arange(0, N)/srate
-    # Time ids
-    t_init_id = np.abs(np.subtract(t,timestamp)).argmin()
-    t_end_id = int(np.floor(t_init_id+240*srate+1)) # TODO: customizable
-    n_val = t_end_id-t_init_id
-    # Read signal 
-    dbuf = np.empty(n_val, dtype = np.float_)
-    edf_in.fseek(1, t_init_id, EDFreader.EDFSEEK_SET)
-    signal = edf_in.readSamples(1, dbuf, n_val)
-    # Deallocate space in memory
-    edf_in.close()
-    return signal
+# # Function to extract epochs
+# def extract_channel_epoch2(chn_number, edf_file, timestamp):
+#     edf_in = EDFreader(edf_file)
+#     # Sampling rate: based on channel 
+#     srate = edf_in.getSampleFrequency(chn_number)
+#     # Build epochs
+#     N = edf_in.getTotalSamples(chn_number)
+#     # Time vector:
+#     t = np.arange(0, N)/srate
+#     # Time ids
+#     t_init_id = np.abs(np.subtract(t,timestamp)).argmin()
+#     t_end_id = int(np.floor(t_init_id+240*srate+1)) # TODO: customizable
+#     n_val = t_end_id-t_init_id
+#     # Read signal 
+#     dbuf = np.empty(n_val, dtype = np.float_)
+#     edf_in.fseek(1, t_init_id, EDFreader.EDFSEEK_SET)
+#     signal = edf_in.readSamples(1, dbuf, n_val)
+#     # Deallocate space in memory
+#     edf_in.close()
+#     return signal
 
-# Function to create epochs and EDF file from them
-def create_epoch_EDF2(edf_file, timestamp, out_path, processes):
-    try:
-        edf_in = EDFreader(edf_file)
-        # First number of labels
-        n_labels = edf_in.getNumSignals()
-        # Create file:
-        edf_out = EDFwriter(out_path, EDFwriter.EDFLIB_FILETYPE_EDFPLUS, n_labels)
-        # Set headers
-        if edf_out.setStartDateTime(edf_in.getStartDateYear(), edf_in.getStartDateMonth(), 
-                                    edf_in.getStartDateDay(), edf_in.getStartTimeHour(), 
-                                    edf_in.getStartTimeMinute(), edf_in.getStartTimeSecond(), 
-                                    edf_in.getStartTimeSubSecond()) != 0:
-            print("setStartDateTime() returned an error")
-            print(edf_in.getStartDateYear(), edf_in.getStartDateMonth(), 
-                                    edf_in.getStartDateDay(), edf_in.getStartTimeHour(), 
-                                    edf_in.getStartTimeMinute(), edf_in.getStartTimeSecond(), 
-                                    edf_in.getStartTimeSubSecond()/1000)
-        if edf_out.setPatientCode(edf_in.getPatientCode()) != 0:
-            print("setPatientCode() returned an error")
-        edf_in_sex = edf_in.getPatientGender()
-        if edf_in_sex == 'Male':
-            if edf_out.setPatientGender(1) != 0:
-                print("setPatientGender() returned an error")
-        elif edf_in_sex == 'Female':
-            if edf_out.setPatientGender(0) != 0:
-                print("setPatientGender() returned an error")
-        else:
-            if edf_out.setPatientGender(2) != 0:
-                print("setPatientGender() returned an error")
-        if edf_out.setPatientName(edf_in.getPatientName()) != 0:
-            print("setPatientName() returned an error")
-        if edf_out.setAdditionalPatientInfo(edf_in.getPatientAdditional()) != 0:
-            print("setAdditionalPatientInfo() returned an error")
-        if edf_out.setAdministrationCode(edf_in.getAdministrationCode()) != 0:
-            print("setAdministrationCode() returned an error")
-        if edf_out.setTechnician(edf_in.getTechnician()) != 0:
-            print("setTechnician() returned an error")
-        if edf_out.setEquipment(edf_in.getEquipment()) != 0:
-            print("setEquipment() returned an error")
-        if edf_out.setAdditionalRecordingInfo(edf_in.getRecordingAdditional()) != 0:
-            print("setAdditionalRecordingInfo() returned an error")
-        # Initial annotation
-        if edf_out.writeAnnotation(0, -1, "Recording starts") != 0:
-            print("writeAnnotation() returned an error")
-        # Close file to extract data
-        edf_in.close()
-        # Extract channel information:
-        chn_lists = range(n_labels)
-        with Pool(processes=processes) as pool2:
-            channel_data = pool2.map(partial(extract_channel_epoch2, edf_file=edf_file, 
-                                            timestamp=timestamp), chn_lists)
-        # Write info channel based 
-        # Reopen file
-        edf_in = EDFreader(edf_file)
-        for chan in chn_lists:
-            if edf_out.setPhysicalMaximum(chan, edf_in.getPhysicalMaximum(chan)) != 0:
-                print("setPhysicalMaximum() returned an error")
-                sys.exit()
-            if edf_out.setPhysicalMinimum(chan, edf_in.getPhysicalMinimum(chan)) != 0:
-                print("setPhysicalMinimum() returned an error")
-                sys.exit()
-            if edf_out.setDigitalMaximum(chan, edf_in.getDigitalMaximum(chan)) != 0:
-                print("setDigitalMaximum() returned an error")
-                sys.exit()
-            if edf_out.setDigitalMinimum(chan, edf_in.getDigitalMinimum(chan)) != 0:
-                print("setDigitalMinimum() returned an error")
-                sys.exit()
-            if edf_out.setPhysicalDimension(chan, edf_in.getPhysicalDimension(chan)) != 0:
-                print("setPhysicalDimension() returned an error")
-                sys.exit()
-            if edf_out.setSampleFrequency(chan, edf_in.getSampleFrequency(chan)) != 0:
-                print("setSampleFrequency() returned an error")
-                sys.exit()
-            if edf_out.setSignalLabel(chan, edf_in.getSignalLabel(chan)) != 0:
-                print("setSignalLabel() returned an error")
-                sys.exit()
-            if edf_out.setPreFilter(chan, edf_in.getPreFilter(chan)) != 0:
-                print("setPreFilter() returned an error")
-                sys.exit()
-            if edf_out.setTransducer(chan, edf_in.getTransducer(chan)) != 0:
-                print("setTransducer() returned an error")
-                sys.exit()
-            if edf_out.writeSamples(channel_data[chan]) != 0:
-                print("writeSamples() returned error: %d" %(edf_out.writeSamples()))
-                break
+# # Function to create epochs and EDF file from them
+# def create_epoch_EDF2(edf_file, timestamp, out_path, processes):
+#     try:
+#         edf_in = EDFreader(edf_file)
+#         # First number of labels
+#         n_labels = edf_in.getNumSignals()
+#         # Create file:
+#         edf_out = EDFwriter(out_path, EDFwriter.EDFLIB_FILETYPE_EDFPLUS, n_labels)
+#         # Set headers
+#         if edf_out.setStartDateTime(edf_in.getStartDateYear(), edf_in.getStartDateMonth(), 
+#                                     edf_in.getStartDateDay(), edf_in.getStartTimeHour(), 
+#                                     edf_in.getStartTimeMinute(), edf_in.getStartTimeSecond(), 
+#                                     edf_in.getStartTimeSubSecond()) != 0:
+#             print("setStartDateTime() returned an error")
+#             print(edf_in.getStartDateYear(), edf_in.getStartDateMonth(), 
+#                                     edf_in.getStartDateDay(), edf_in.getStartTimeHour(), 
+#                                     edf_in.getStartTimeMinute(), edf_in.getStartTimeSecond(), 
+#                                     edf_in.getStartTimeSubSecond()/1000)
+#         if edf_out.setPatientCode(edf_in.getPatientCode()) != 0:
+#             print("setPatientCode() returned an error")
+#         edf_in_sex = edf_in.getPatientGender()
+#         if edf_in_sex == 'Male':
+#             if edf_out.setPatientGender(1) != 0:
+#                 print("setPatientGender() returned an error")
+#         elif edf_in_sex == 'Female':
+#             if edf_out.setPatientGender(0) != 0:
+#                 print("setPatientGender() returned an error")
+#         else:
+#             if edf_out.setPatientGender(2) != 0:
+#                 print("setPatientGender() returned an error")
+#         if edf_out.setPatientName(edf_in.getPatientName()) != 0:
+#             print("setPatientName() returned an error")
+#         if edf_out.setAdditionalPatientInfo(edf_in.getPatientAdditional()) != 0:
+#             print("setAdditionalPatientInfo() returned an error")
+#         if edf_out.setAdministrationCode(edf_in.getAdministrationCode()) != 0:
+#             print("setAdministrationCode() returned an error")
+#         if edf_out.setTechnician(edf_in.getTechnician()) != 0:
+#             print("setTechnician() returned an error")
+#         if edf_out.setEquipment(edf_in.getEquipment()) != 0:
+#             print("setEquipment() returned an error")
+#         if edf_out.setAdditionalRecordingInfo(edf_in.getRecordingAdditional()) != 0:
+#             print("setAdditionalRecordingInfo() returned an error")
+#         # Initial annotation
+#         if edf_out.writeAnnotation(0, -1, "Recording starts") != 0:
+#             print("writeAnnotation() returned an error")
+#         # Close file to extract data
+#         edf_in.close()
+#         # Extract channel information:
+#         chn_lists = range(n_labels)
+#         with Pool(processes=processes) as pool2:
+#             channel_data = pool2.map(partial(extract_channel_epoch2, edf_file=edf_file, 
+#                                             timestamp=timestamp), chn_lists)
+#         # Write info channel based 
+#         # Reopen file
+#         edf_in = EDFreader(edf_file)
+#         for chan in chn_lists:
+#             if edf_out.setPhysicalMaximum(chan, edf_in.getPhysicalMaximum(chan)) != 0:
+#                 print("setPhysicalMaximum() returned an error")
+#                 sys.exit()
+#             if edf_out.setPhysicalMinimum(chan, edf_in.getPhysicalMinimum(chan)) != 0:
+#                 print("setPhysicalMinimum() returned an error")
+#                 sys.exit()
+#             if edf_out.setDigitalMaximum(chan, edf_in.getDigitalMaximum(chan)) != 0:
+#                 print("setDigitalMaximum() returned an error")
+#                 sys.exit()
+#             if edf_out.setDigitalMinimum(chan, edf_in.getDigitalMinimum(chan)) != 0:
+#                 print("setDigitalMinimum() returned an error")
+#                 sys.exit()
+#             if edf_out.setPhysicalDimension(chan, edf_in.getPhysicalDimension(chan)) != 0:
+#                 print("setPhysicalDimension() returned an error")
+#                 sys.exit()
+#             if edf_out.setSampleFrequency(chan, edf_in.getSampleFrequency(chan)) != 0:
+#                 print("setSampleFrequency() returned an error")
+#                 sys.exit()
+#             if edf_out.setSignalLabel(chan, edf_in.getSignalLabel(chan)) != 0:
+#                 print("setSignalLabel() returned an error")
+#                 sys.exit()
+#             if edf_out.setPreFilter(chan, edf_in.getPreFilter(chan)) != 0:
+#                 print("setPreFilter() returned an error")
+#                 sys.exit()
+#             if edf_out.setTransducer(chan, edf_in.getTransducer(chan)) != 0:
+#                 print("setTransducer() returned an error")
+#                 sys.exit()
+#             if edf_out.writeSamples(channel_data[chan]) != 0:
+#                 print("writeSamples() returned error: %d" %(edf_out.writeSamples()))
+#                 break
         
-        # Headers
+#         # Headers
         
-        # Deallocate space in memory
-        del t
-        edf_out.close()
-        edf_in.close()
-    except Exception:
-        traceback.print_exc()
-        edf_out.close()
-        edf_in.close()
+#         # Deallocate space in memory
+#         del t
+#         edf_out.close()
+#         edf_in.close()
+#     except Exception:
+#         traceback.print_exc()
+#         edf_out.close()
+#         edf_in.close()
