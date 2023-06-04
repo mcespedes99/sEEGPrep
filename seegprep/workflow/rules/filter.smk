@@ -1,7 +1,7 @@
 # Define output folder for edf file
 def out_dir_filt():
     # If this is not the last step, place in work
-    if config['run_all'] or config['rereference'] or config['regions_id'] or run_all:
+    if config['run_all'] or config['rereference'] or config['PLI_rej'] or config['regions_id'] or run_all:
         return 'work'
     # If this is the last step, place in bids
     else:
@@ -43,13 +43,14 @@ rule filter_data:
                         root=out_dir_filt(),
                         datatype='ieeg',
                         suffix='ieeg.edf',
-                        rec='noise_reject',
+                        rec='denoise',
                         **out_edf_wc
                 ),
         out_tsv = bids(
                         root='bids',
                         datatype='ieeg',
                         suffix='noisy_data.tsv',
+                        rec='denoise',
                         **out_edf_wc
                 ),
     resources:

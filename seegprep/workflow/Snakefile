@@ -85,7 +85,7 @@ wildcard_constraints:  **snakebids.get_wildcard_constraints(config['pybids_input
 run_all = False
 if (not config['run_all']) and (not config['epoch']) and (not config['downsample']) \
     and (not config['filter']) and (not config['rereference']) \
-    and (not config['regions_id']):
+    and (not config['PLI_rej']) and (not config['regions_id']):
     run_all = True
 
 ## Input definition
@@ -99,8 +99,18 @@ else:
     input_ziplist = inputs.zip_lists['ieeg']
     out_edf_wc = inputs.wildcards['ieeg']
 
+# print(input_ziplist)
+# print(out_edf_wc)
+# out_edf = bids(
+#                         root='bids',
+#                         datatype='ieeg',
+#                         suffix='ieeg.edf',
+#                         rec='PLIreject',
+#                         **out_edf_wc
+#                 )
+# print(out_edf)
 #---- end snakebids boilerplate -----------------------------------------------
-localrules: all, get_epoch_files
+# Add rules in order
 ## Epoch extraction rule
 if config['epoch'] or config['run_all'] or run_all:
     include: "rules/epoch_extraction.smk"
@@ -117,9 +127,17 @@ if config['filter'] or config['run_all'] or run_all:
 if config['rereference'] or config['run_all'] or run_all:
     include: "rules/rereference.smk"
 
+## PLI rejection
+if config['PLI_rej'] or config['run_all'] or run_all:
+    include: "rules/PLI_reject.smk"
+
 ## Region identification
 if config['regions_id'] or config['run_all'] or run_all:
     include: "rules/identify_regions.smk"
+
+## Merge tsv files
+if config['regions_id'] or config['rereference'] or config['run_all'] or run_all:
+    include: "rules/merge_tsv.smk"
 
 # print(config['processes'])
 
@@ -130,11 +148,19 @@ if config['regions_id'] or config['run_all'] or run_all:
 def define_all_inputs():
     # If regions_id is the last step
     if config['run_all'] or config['regions_id']:
-        # print('run_all')
-        return rules.identify_regions.output
+        # Only use last output of the rules.merge_tsv.output.out_files, which is the one under bids
+        return rules.identify_regions.output.out_edf, rules.merge_tsv.output.out_files[-1]
+    # Power line rejection is the last step and rereference is called
+    elif config['PLI_rej'] and config['rereference']:
+        # print('PLI')
+        return rules.PLI_reject.output.out_edf, rules.merge_tsv.output.out_files[-1]
+    # Else if PLI is called but not rereference 
+    elif config['PLI_rej']:
+        # print('PLI')
+        return rules.PLI_reject.output
     # Else if rereference is the last step
     elif config['rereference']:
-        return rules.rereference.output
+        return rules.rereference.output.out_edf, rules.merge_tsv.output.out_files[-1]
     # Else if filtering is the last step
     elif config['filter']:
         return rules.filter_data.output

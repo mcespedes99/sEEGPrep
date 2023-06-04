@@ -118,7 +118,7 @@ lineFreq: 60
 # (around the theoretical fundamental and harmonic frequencies) in which
 # to search for possible peaks associated with line noise. 
 # Default: 4 (ex: if lineFreq=60, the range would go from 58 to 62)
-bandwidth: 4
+bandwidth: 8
 
 # (2.e) Number of harmonics to remove when using Notch Filter
 # Default: 1 (only removes fundamental frequency)
@@ -218,12 +218,17 @@ parse_args:
     action: store_true
 
   --filter:
-    help: 'Filter a given edf file (PLI removal and trend removal).'
+    help: 'Filter a given edf file (detrending and noise detection).'
     default: false
     action: store_true
   
   --rereference:
     help: 'Rereference a given unipolar edf file to bipolar.'
+    default: false
+    action: store_true
+
+  --PLI_rej:
+    help: 'Power Line Noise rejection given an edf file.'
     default: false
     action: store_true
 

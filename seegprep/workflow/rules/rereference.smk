@@ -1,7 +1,7 @@
 # Define output folder
 def out_dir_reref():
     # If this is not the last step, place in work
-    if config['run_all'] or config['regions_id'] or run_all:
+    if config['run_all'] or config['regions_id'] or config['PLI_rej'] or run_all:
         return 'work'
     # If this is the last step, place in bids
     else:
@@ -48,6 +48,7 @@ rule rereference:
                         root=out_dir_reref(),
                         datatype='ieeg',
                         suffix='reref_native_space.tsv',
+                        rec='reref',
                         **out_edf_wc
                 ),
     resources:

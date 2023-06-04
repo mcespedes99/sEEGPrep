@@ -17,13 +17,14 @@ def get_tmpdir():
 def get_time(wildcards, number_clips):
     subj_id = f'subj_{wildcards.subject}'
     ses_id = f'ses_{wildcards.session}'
-    print(subj_id, ses_id, number_clips[subj_id][ses_id])
+    # print(subj_id, ses_id, number_clips[subj_id][ses_id])
     return number_clips[subj_id][ses_id]*180
 
 # Define output folder for edf file
 def out_dir_epochs():
     # If this is not the last step, place in work
-    if config['run_all'] or config['downsample'] or config['filter'] or config['rereference'] or config['regions_id'] or run_all:
+    if config['run_all'] or config['downsample'] or config['filter'] or config['rereference'] or config['PLI_rej'] or config['regions_id'] or run_all:
+        # print('test')
         return 'work'
     # If this is the last step, place in bids
     else:

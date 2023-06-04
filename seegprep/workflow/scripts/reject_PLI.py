@@ -11,8 +11,7 @@ sys.path.append(path)
 from clean_seeg import cleanSEEG
 
 def main():
-    edf_path = snakemake.input.edf
-    chn_tsv_path = snakemake.input.tsv
+    edf_path, chn_tsv_path = snakemake.input.edf_tsv
     processes = snakemake.config['processes']
     out_edf = snakemake.output.out_edf
     LOG_FILENAME = snakemake.log[0]

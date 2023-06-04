@@ -1,7 +1,7 @@
 # Define output folder for edf file
 def out_dir_dn():
     # If this is not the last step, place in work
-    if config['run_all'] or config['filter'] or config['rereference'] or config['regions_id'] or run_all:
+    if config['run_all'] or config['filter'] or config['rereference'] or config['PLI_rej'] or config['regions_id'] or run_all:
         return 'work'
     # If this is the last step, place in bids
     else:
