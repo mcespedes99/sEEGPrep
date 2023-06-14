@@ -85,7 +85,7 @@ wildcard_constraints:  **snakebids.get_wildcard_constraints(config['pybids_input
 run_all = False
 if (not config['run_all']) and (not config['epoch']) and (not config['downsample']) \
     and (not config['filter']) and (not config['rereference']) \
-    and (not config['PLI_rej']) and (not config['regions_id']):
+    and (not config['PLI_rej']) and (not config['regions_id']) and (not config['anat']):
     run_all = True
 
 ## Input definition
@@ -95,6 +95,9 @@ if config['epoch'] or config['run_all'] or run_all:
     # Add clip and rec to wildcards of outputs
     out_edf_wc = copy.deepcopy(inputs.wildcards['ieeg'])
     out_edf_wc['clip'] = '{clip}'
+elif config['anat']:
+    input_ziplist = inputs.zip_lists['T1w']
+    out_edf_wc = inputs.wildcards['T1w']
 else:
     input_ziplist = inputs.zip_lists['ieeg']
     out_edf_wc = inputs.wildcards['ieeg']
@@ -111,6 +114,9 @@ else:
 # print(out_edf)
 #---- end snakebids boilerplate -----------------------------------------------
 # Add rules in order
+include: "rules/preproc_t1.smk"
+include: "rules/synthseg.smk"
+include: "rules/reg_t1_to_template.smk"
 ## Epoch extraction rule
 if config['epoch'] or config['run_all'] or run_all:
     include: "rules/epoch_extraction.smk"
@@ -160,6 +166,8 @@ def define_all_inputs():
         return rules.PLI_reject.output
     # Else if rereference is the last step
     elif config['rereference']:
+        print(rules.rereference.output.out_edf, rules.merge_tsv.output.out_files[-1])
+        print(type(rules.rereference.output.out_edf), type(rules.merge_tsv.output.out_files[-1]))
         return rules.rereference.output.out_edf, rules.merge_tsv.output.out_files[-1]
     # Else if filtering is the last step
     elif config['filter']:
@@ -170,6 +178,16 @@ def define_all_inputs():
     # Else if epoch extraction is the last step
     elif config['epoch']:
         return rules.get_epoch_files.output
+    elif config['anat']:
+        dseg = bids(
+                    root='work',
+                    datatype="anat",
+                    **inputs.wildcards['T1w'],
+                    desc="synthsegcortparc",
+                    suffix="dseg.nii.gz"
+                )
+        tmp_file = rules.greedy_t1_to_template.output.warped_flo[-1]
+        return dseg, tmp_file
     # Else: default case run_all
     else:
         # print('hola')

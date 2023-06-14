@@ -90,6 +90,18 @@ pybids_inputs:
     custom_path: '/home/mcesped/projects/ctb-akhanf/cfmm-bids/Khan/clinical_imaging/epi_iEEG/derivatives/atlasreg/sub-P{subject}/sub-P{subject}_desc-rigid_from-noncontrast_to-contrast_type-ras_xfm.txt'
     # custom_path: '/home/mcesped/projects/ctb-akhanf/cfmm-bids/Khan/clinical_imaging/epi_iEEG/derivatives/atlasreg/sub-P{subject}/sub-P{subject}_acq-noncontrast_desc-rigid_from-noncontrast_to-contrast_type-ras_xfm.txt'
 
+  T1w:
+    filters:
+      suffix: 'T1w'
+      extension: '.nii.gz'
+    wildcards:
+      - subject
+      - session
+      - acquisition
+      - task
+      - run
+    custom_path: '/project/ctb-akhanf/cfmm-bids/Khan/clinical_imaging/epi_iEEG/derivatives/atlasreg/sub-P{subject}/sub-P{subject}_T1w.nii.gz'
+
 freesurf_dir: '/home/mcesped/projects/ctb-akhanf/cfmm-bids/Khan/clinical_imaging/epi_iEEG/derivatives/fastsurfer/'
 freesurf_patient_label: 'sub-P{subject}'
 
@@ -152,6 +164,12 @@ discard_wm_un: True
 # Format: [{type of channel}, {channel label}, {x position}, {y position}, {z position}, {group}]
 # Default: ['type', 'label', 'x', 'y', 'z', 'group'] or None (both options are equivalent)
 tsv_cols: ['type', 'label', 'x', 'y', 'z', 'orig_group']
+
+# Templates
+template: MNI152NLin2009cAsym
+template_t1w: resources/tpl-MNI152NLin2009cAsym/tpl-MNI152NLin2009cAsym_res-01_T1w.nii.gz
+template_mask: resources/tpl-MNI152NLin2009cAsym/tpl-MNI152NLin2009cAsym_res-01_desc-brain_mask.nii.gz 
+
 
 
 #-------------------------------BIDS APP Configuration---------------------------
@@ -237,6 +255,11 @@ parse_args:
     default: false
     action: store_true
 
+
+  --anat:
+    help: 'Segmentation and preprocessing of T1w.'
+    default: false
+    action: store_true
  # custom command-line parameters can then be added, these will get added to the config
  # below is an example to override config['bet_frac']
 #   --smoothing_fwhm:
@@ -247,6 +270,7 @@ parse_args:
 # #--- workflow specific configuration -- below is just an example:
 
 
-# #singularity containers
-# singularity:
-#     fsl: 'docker://brainlife/fsl/6.0.0'
+#singularity containers
+singularity:
+    diffparc: '/project/ctb-akhanf/akhanf/singularity/bids-apps/khanlab_diffparc-deps_v0.1.0-fix.sif' 
+    # 'docker://khanlab/diffparc-deps:v0.1.0-fix'  

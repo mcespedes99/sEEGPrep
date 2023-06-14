@@ -47,7 +47,15 @@ rule identify_regions:
     input:
         edf_tsv = region_id_inputs(),
         # Other parameters
-        parc = lambda wc: define_parc(wc, inputs.path['parc']),
+        # parc = lambda wc: define_parc(wc, inputs.path['parc']),
+        parc = bids(
+                root='work',
+                datatype="anat",
+                **inputs.wildcards['T1w'],
+                desc="synthsegcortparc",
+                suffix="dseg.nii.gz"
+        ),
+        tmp_file = rules.greedy_t1_to_template.output.warped_flo,
         # expand(inputs.path['parc'], zip, extension=['.mgz','.orig.mgz'], allow_missing=True),
         tf = inputs.path['tf'],
     params:
