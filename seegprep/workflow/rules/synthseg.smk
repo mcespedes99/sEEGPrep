@@ -1,17 +1,3 @@
-def get_template_prefix(root, subj_wildcards, template):
-    """creates prefix for template files, including subject/session wildcards
-    so that DAGs for each subject/session are kept independent.
-        e.g.: sub-001/tpl-MNI152NLin2009cAsym/tpl-MNI152NLin2009cAsym"""
-
-    path_entities = bids(root=root, **subj_wildcards).split("/")[
-        :-1
-    ]  # leave out the file prefix
-
-    path_entities.append(f"tpl-{template}")  # sub-folder name
-    path_entities.append(f"tpl-{template}")  # file prefix
-
-    return "/".join(path_entities)
-
 rule run_synthseg:
     input:
         t1=rules.n4_t1_withmask.output.t1,
@@ -26,8 +12,10 @@ rule run_synthseg:
             )
         ),
     container:
-        config["singularity"]["diffparc"]
+        config["singularity"]["graham"]["diffparc"]
     threads: 8
+    resources:
+        mem_mb=16000,
     group:
         "anat"
     shell:
@@ -49,7 +37,7 @@ rule run_synthseg_withcortparc:
             )
         ),
     container:
-        config["singularity"]["diffparc"]
+        config["singularity"]["graham"]["diffparc"]
     threads: 8
     group:
         "anat"
@@ -82,7 +70,7 @@ rule reslice_synthseg_to_t1:
             suffix="dseg.nii.gz"
         ),
     container:
-        config["singularity"]["diffparc"]
+        config["singularity"]["graham"]["diffparc"]
     group:
         "anat"
     shell:
@@ -97,7 +85,7 @@ rule run_synthseg_template:
         )
         + "_desc-synthseg_dseg.nii.gz",
     container:
-        config["singularity"]["diffparc"]
+        config["singularity"]["graham"]["diffparc"]
     threads: 8
     group:
         "anat"

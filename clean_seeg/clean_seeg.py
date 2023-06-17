@@ -10,7 +10,7 @@ class cleanSEEG:
     
     def __init__(self, 
                  edf_path, 
-                 chn_csv_path = None, 
+                 chn_csv_path = None, # Has to be in MRI RAS space! (not freesurfer)
                  RmTrendMethod = 'HighPass',
                  methodPLI = 'Zapline', 
                  lineFreq = 60,
@@ -19,7 +19,7 @@ class cleanSEEG:
                  noiseDetect = True,
                  highpass = [0.5, 1], 
                  maxFlatlineDuration = 5, 
-                 trsfPath=None, 
+                 tfm=[], 
                  epoch_autoreject=5, # Epoch length for autoreject
                  processes = None):
         import pyedflib
@@ -33,7 +33,7 @@ class cleanSEEG:
         self.noiseDetect = noiseDetect
         self.highpass = highpass # Set to None to shut down
         self.maxFlatlineDuration = maxFlatlineDuration
-        self.trsfPath = trsfPath
+        self.tfm = [] # has to be a list of tuple with format: (path, invert), with 'path' as str and invert as boolean
         self.epoch_autoreject = epoch_autoreject
         self.processes = processes
         # Extra params 
@@ -193,7 +193,7 @@ class cleanSEEG:
             edf.close()
             chn_info_df, chn_list, df_cols = get_chn_info(self.chn_csv_path, elec_edf, df_cols = df_cols) #, conf=conf
         # Create tsv file with information about location of the channels
-        df_location = extract_location(aparc_aseg_path, self.trsfPath, chn_info_df, df_cols)
+        df_location = extract_location(aparc_aseg_path, self.tfm, chn_info_df, df_cols)
         if write_tsv:
             if os.path.exists(out_tsv_path):
                 logging.warning(f" tsv file {out_tsv_path} will be overwritten.")
@@ -376,9 +376,8 @@ class cleanSEEG:
         # Open edf file
         edf_in = pyedflib.EdfReader(self.edf_path)
         # Extract labels
-        labels = edf_in.getSignalLabels()
-        # Begin by getting the position of the electrodes in RAS space
         elec_edf = edf_in.getSignalLabels()
+        # Begin by getting the position of the electrodes in RAS space
         chn_labels = get_chn_labels(self.chn_csv_path, elec_edf)
         try:
             # Number of samples
@@ -401,7 +400,7 @@ class cleanSEEG:
             signal = []
             # Extract signal per channel
             for chan in chn_labels:
-                id_ch = labels.index(chan)
+                id_ch = elec_edf.index(chan)
                 chn_sig = edf_in.readSignal(id_ch)
                 signal.append(chn_sig)
             edf_in.close()
@@ -466,6 +465,8 @@ class cleanSEEG:
         import numpy as np
         import pandas as pd
         import traceback
+        import nibabel as nb
+        import os
         print(raw.shape)
         if self.subject == None or self.subjects_dir == None:
             raise Exception('Please indicate a valid subject and directory for the freesurfer outputs.')
@@ -482,8 +483,14 @@ class cleanSEEG:
         # print(raw.shape)
         #---------------Run automatic detection of noise using autoreject-------------------
         print('Running autoreject')
-        # Begin by getting the position of the electrodes in RAS space
-        chn_pos = get_chn_positions(self.chn_csv_path, electrodes_edf, self.trsfPath)
+        # Begin by getting the position of the electrodes in freesurfer RAS space
+        # Get required transforms:
+        t1 = nb.load(os.path.join(self.subjects_dir, self.subject, 'mri/T1.mgz'))
+        Torig = t1.header.get_vox2ras_tkr() # From freesurfer coords to vox
+        # Build list of transforms: tfm (which could have the non-contrast to contrast), 
+        # affine (between MRI RAS and vox) and Torig.
+        list_tfms = self.tfm+[(t1.affine, True), (Torig, False)]
+        chn_pos = get_chn_positions(self.chn_csv_path, electrodes_edf, list_tfms)
         # Channels to extract
         keys = list(chn_pos.keys())
         # Number of samples

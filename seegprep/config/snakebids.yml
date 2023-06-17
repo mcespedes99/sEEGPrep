@@ -166,10 +166,15 @@ discard_wm_un: True
 tsv_cols: ['type', 'label', 'x', 'y', 'z', 'orig_group']
 
 # Templates
-template: MNI152NLin2009cAsym
-template_t1w: resources/tpl-MNI152NLin2009cAsym/tpl-MNI152NLin2009cAsym_res-01_T1w.nii.gz
-template_mask: resources/tpl-MNI152NLin2009cAsym/tpl-MNI152NLin2009cAsym_res-01_desc-brain_mask.nii.gz 
-
+# template: MNI152NLin2009cAsym
+# template_t1w: resources/tpl-MNI152NLin2009cAsym/tpl-MNI152NLin2009cAsym_res-01_T1w.nii.gz
+# template_mask: resources/tpl-MNI152NLin2009cAsym/tpl-MNI152NLin2009cAsym_res-01_desc-brain_mask.nii.gz 
+template: MNI152NLin2009cSym
+template_t1w: resources/tpl-MNI152NLin2009cSym/tpl-MNI152NLin2009cSym_res-1_T1w.nii.gz
+template_mask: resources/tpl-MNI152NLin2009cSym/tpl-MNI152NLin2009cSym_res-1_desc-brain_mask.nii.gz 
+# template: MNI305
+# template_t1w: resources/tpl-MNI305/tpl-MNI305_T1w.nii.gz
+# template_mask: resources/tpl-MNI305/tpl-MNI305_desc-brain_mask.nii.gz 
 
 
 #-------------------------------BIDS APP Configuration---------------------------
@@ -255,11 +260,21 @@ parse_args:
     default: false
     action: store_true
 
-
   --anat:
     help: 'Segmentation and preprocessing of T1w.'
     default: false
     action: store_true
+
+  --graham:
+    help: 'Use containers on compute canada graham.'
+    default: false
+    action: store_true
+  
+  --fs_license:
+    help: 'Provide path to freesurfer license text file.'
+    default: false
+    required: false
+    nargs: 1
  # custom command-line parameters can then be added, these will get added to the config
  # below is an example to override config['bet_frac']
 #   --smoothing_fwhm:
@@ -272,5 +287,9 @@ parse_args:
 
 #singularity containers
 singularity:
-    diffparc: '/project/ctb-akhanf/akhanf/singularity/bids-apps/khanlab_diffparc-deps_v0.1.0-fix.sif' 
-    # 'docker://khanlab/diffparc-deps:v0.1.0-fix'  
+    graham:
+      diffparc: '/project/ctb-akhanf/akhanf/singularity/bids-apps/khanlab_diffparc-deps_v0.1.0-fix.sif'
+      fmriprep: '/project/ctb-akhanf/myousif9/containers/fmriprep_22.0.1.sif' 
+    docker:
+      diffparc: 'docker://khanlab/diffparc-deps:v0.1.0-fix'
+      fmriprep: docker://nipreps/fmriprep:22.0.1'

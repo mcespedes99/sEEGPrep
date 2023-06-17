@@ -64,7 +64,7 @@ def downsampling(chn, edf_file, orig_srate, target_srate):
     return signal_dsG, downsampledSrate
     
 
-def get_chn_positions(chn_csv_path, electrodes_edf, trsfPath=None):
+def get_chn_positions(chn_csv_path, electrodes_edf, tfm_list=None):
     """Creates dictionary with the position of each electrode.
     Parameters
     ----------
@@ -80,11 +80,14 @@ def get_chn_positions(chn_csv_path, electrodes_edf, trsfPath=None):
     for i in np.arange(len(elec_pos)):
         label = elec_pos.loc[[i], ['label']].values[0][0]
         if label in electrodes_edf:
-            pos = elec_pos.loc[[i], ['x','y','z']].values[0]/1000
-            if trsfPath != None:
-                tfm = readRegMatrix(trsfPath)
-                pos = contrast_to_non_contrast(pos, tfm)
-            pos = pos.tolist()
+            pos = elec_pos.loc[[i], ['x','y','z']].values[0]
+            for tfm, inv_bool in tfm_list:
+                if type(tfm)==str:
+                    tfm = readRegMatrix(tfm)
+                if inv_bool:
+                    tfm = np.linalg.inv(tfm)
+                pos = mne.transforms.apply_trans(tfm, pos)
+            pos = (pos/1000).tolist()
             chn_pos[label] = pos
     return chn_pos
 

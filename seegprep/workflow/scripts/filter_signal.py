@@ -33,7 +33,7 @@ def main():
                     noiseDetect = snakemake.config['noiseDetect'],
                     highpass = snakemake.config['highpass'], 
                     maxFlatlineDuration = snakemake.config['maxFlatlineDuration'], 
-                    trsfPath = noncon_to_con_tf_path, 
+                    tfm = [(noncon_to_con_tf_path, False)], # Only has to have the tfm from the space in the tsv to the one in the 
                     epoch_autoreject = snakemake.config['epoch_length'],
                     processes = processes)
 

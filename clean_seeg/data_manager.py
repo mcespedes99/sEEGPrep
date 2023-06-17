@@ -189,7 +189,7 @@ def get_colors_labels():
     return label_map
 
 # Function to get label id based on parcellation obj
-def get_electrodes_id(parc, elec_df, non_cont_to_cont_tf, df_cols):
+def get_electrodes_id(parc, elec_df, df_cols, non_cont_to_cont_tf):
     # Load data of parcellations
     data_parc = np.asarray(parc.dataobj)
     # Coordinates in MRI RAS
@@ -197,6 +197,10 @@ def get_electrodes_id(parc, elec_df, non_cont_to_cont_tf, df_cols):
     # print(mri_ras_mm)
     # Transform from contrast mri ras to non-contrast MRI ras
     mri_ras_mm = mne.transforms.apply_trans(non_cont_to_cont_tf, mri_ras_mm)
+    # Update position of electrodes in df 
+    elec_df[df_cols['x']] = mri_ras_mm[:,0]
+    elec_df[df_cols['y']] = mri_ras_mm[:,1]
+    elec_df[df_cols['z']] = mri_ras_mm[:,2]
     # print(mri_ras_mm)
     # To voxels
     inv_affine = np.linalg.inv(parc.affine)
@@ -204,12 +208,12 @@ def get_electrodes_id(parc, elec_df, non_cont_to_cont_tf, df_cols):
     vox = (mne.transforms.apply_trans(inv_affine, mri_ras_mm)).astype(int)
     # print(vox)
     id = data_parc[vox[:,0], vox[:,1], vox[:,2]]
-    return id
+    return id, elec_df
 
 # Function to get rgb values for each contact
 def get_label_rgb(parc, elec_df, non_cont_to_cont_tf, label_map, df_cols):
     # vox, data_parc = ras2vox(parc, elec_df, non_cont_to_cont_tf)
-    id = get_electrodes_id(parc, elec_df, non_cont_to_cont_tf, df_cols)
+    id, elec_df = get_electrodes_id(parc, elec_df, non_cont_to_cont_tf, df_cols)
     vals = label_map.loc[id, ['Label','R', 'G', 'B']].to_numpy()
     vals = np.c_[id,vals]
     vals = pd.DataFrame(data=vals, columns=['Label ID','Label','R', 'G', 'B'])
@@ -222,7 +226,7 @@ def readRegMatrix(trsfPath):
 		return np.loadtxt(f.readlines())
 
 # Function to create tsv with bipolar channels info
-def extract_location(parc_path, noncon_to_con_tf_path, chn_info_df, df_cols):
+def extract_location(parc_path, chn_info_df, df_cols, noncon_to_con_tf_path):
     import os
     # Load labels from LUT file
     labels = get_colors_labels()

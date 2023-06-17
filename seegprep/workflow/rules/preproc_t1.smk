@@ -1,3 +1,17 @@
+def get_template_prefix(root, subj_wildcards, template):
+    """creates prefix for template files, including subject/session wildcards
+    so that DAGs for each subject/session are kept independent.
+        e.g.: sub-001/tpl-MNI152NLin2009cAsym/tpl-MNI152NLin2009cAsym"""
+
+    path_entities = bids(root=root, **subj_wildcards).split("/")[
+        :-1
+    ]  # leave out the file prefix
+
+    path_entities.append(f"tpl-{template}")  # sub-folder name
+    path_entities.append(f"tpl-{template}")  # file prefix
+
+    return "/".join(path_entities)
+
 rule synthstrip_t1:
     input:
         t1=inputs.path["T1w"],
@@ -14,7 +28,7 @@ rule synthstrip_t1:
     group:
         "anat"
     container:
-        config["singularity"]["diffparc"]
+        config["singularity"]["graham"]["diffparc"]
     threads: 8
     shell:
         "python3 /opt/freesurfer/mri_synthstrip -i {input.t1} -m {output.mask} --no-csf"
@@ -35,7 +49,7 @@ rule fixheader_synthstrip:
     group:
         "anat"
     container:
-        config["singularity"]["diffparc"]
+        config["singularity"]["graham"]["diffparc"]
     shell:
         "c3d {input.t1} {input.mask} -copy-transform -o {output.mask}"
 
@@ -54,7 +68,7 @@ rule n4_t1_withmask:
         ),
     threads: 8
     container:
-        config["singularity"]["diffparc"]
+        config["singularity"]["graham"]["diffparc"]
     group:
         "anat"
     shell:
@@ -68,14 +82,14 @@ rule mask_subject_t1w:
         mask=rules.fixheader_synthstrip.output.mask,
     output:
         t1=bids(
-            root='work',
+            root='work/synthstrip',
             datatype="anat",
             **inputs.wildcards['T1w'],
             suffix="T1w.nii.gz",
             desc="masked"
         ),
     container:
-        config["singularity"]["diffparc"]
+        config["singularity"]["graham"]["diffparc"]
     group:
         "anat"
     shell:
