@@ -33,7 +33,7 @@ class cleanSEEG:
         self.noiseDetect = noiseDetect
         self.highpass = highpass # Set to None to shut down
         self.maxFlatlineDuration = maxFlatlineDuration
-        self.tfm = [] # has to be a list of tuple with format: (path, invert), with 'path' as str and invert as boolean
+        self.tfm = [] # has to be a list of tuple with format: (path, invert), with 'path' as str or tfm and invert as boolean
         self.epoch_autoreject = epoch_autoreject
         self.processes = processes
         # Extra params 
@@ -483,14 +483,7 @@ class cleanSEEG:
         # print(raw.shape)
         #---------------Run automatic detection of noise using autoreject-------------------
         print('Running autoreject')
-        # Begin by getting the position of the electrodes in freesurfer RAS space
-        # Get required transforms:
-        t1 = nb.load(os.path.join(self.subjects_dir, self.subject, 'mri/T1.mgz'))
-        Torig = t1.header.get_vox2ras_tkr() # From freesurfer coords to vox
-        # Build list of transforms: tfm (which could have the non-contrast to contrast), 
-        # affine (between MRI RAS and vox) and Torig.
-        list_tfms = self.tfm+[(t1.affine, True), (Torig, False)]
-        chn_pos = get_chn_positions(self.chn_csv_path, electrodes_edf, list_tfms)
+        chn_pos = get_chn_positions(self.chn_csv_path, electrodes_edf, self.tfm)
         # Channels to extract
         keys = list(chn_pos.keys())
         # Number of samples

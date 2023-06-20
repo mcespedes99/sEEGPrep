@@ -25,6 +25,14 @@ def filter_inputs():
         #print('default filter')
         return rules.downsample.output.out_edf
 
+# Get transform file
+def get_tf(wildcards):
+    if tf_path != False:
+        tf_path = expand(inputs.path['tf'], **wildcards)[0]
+        if os.path.exists(tf_path):
+            return tf_path
+    return None
+
 #print(config['freesurf_dir'])
 # Rule
 rule filter_data:
@@ -32,10 +40,11 @@ rule filter_data:
         edf = filter_inputs(),
         # Other parameters
         tsv = inputs.path['seega_tsv'],
-        tf = inputs.path['tf'],
+        t1 = 'derivatives/freesurfer/sub-{subject}/mri/T1.mgz',
     params:
         freesurf_dir = config['freesurf_dir'],
-        freesurf_patient = config['freesurf_patient_label']
+        freesurf_patient = config['freesurf_patient_label'],
+        tf = get_tf,
     group:
         "subj"
     output:

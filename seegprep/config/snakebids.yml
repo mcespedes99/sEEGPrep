@@ -289,7 +289,7 @@ parse_args:
 singularity:
     graham:
       diffparc: '/project/ctb-akhanf/akhanf/singularity/bids-apps/khanlab_diffparc-deps_v0.1.0-fix.sif'
-      fmriprep: '/project/ctb-akhanf/myousif9/containers/fmriprep_22.0.1.sif' 
+      fmriprep: '/project/6050199/akhanf/singularity/bids-apps/poldracklab_fmriprep_20.1.1.sif' 
     docker:
       diffparc: 'docker://khanlab/diffparc-deps:v0.1.0-fix'
       fmriprep: docker://nipreps/fmriprep:22.0.1'
