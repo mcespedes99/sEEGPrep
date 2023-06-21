@@ -29,37 +29,39 @@ def region_id_inputs():
         #print('reref before regionsID (run all)')
         return rules.PLI_reject.output.out_edf, rules.rereference.output.out_tsv
 
-def define_parc(wildcards, parc_path):
-    parc_options = expand(parc_path, extension=['.mgz','.orig.mgz'], **wildcards)
-    # print(parc_options)
-    parc_cleaned = []
-    for parc_file in parc_options:
-        if os.path.exists(parc_file):
-            parc_cleaned.append(parc_file)
-    # print('Clean')
-    # print(parc_cleaned)
-    if not parc_cleaned:
-        raise ValueError('No parcellation file aparc+aseg was found.')
-    return parc_cleaned[0]
+# def define_parc(wildcards, parc_path):
+#     parc_options = expand(parc_path, extension=['.mgz','.orig.mgz'], **wildcards)
+#     # print(parc_options)
+#     parc_cleaned = []
+#     for parc_file in parc_options:
+#         if os.path.exists(parc_file):
+#             parc_cleaned.append(parc_file)
+#     # print('Clean')
+#     # print(parc_cleaned)
+#     if not parc_cleaned:
+#         raise ValueError('No parcellation file aparc+aseg was found.')
+#     return parc_cleaned[0]
+def get_transforms(wildcards):
+    tfm_list = []
+    # Include non-contrast to contrast space if necessary
+    if config['t1_to_coords_tfm'] != False:
+        tf_path = expand(inputs.path['tf'], **wildcards)[0]
+        if os.path.exists(tf_path):
+            tfm_list += [(tf_path, False)]
+    # If segmentation based on MNI, include warps and affine tfms
+    if config['space_regions'] == 'MNI':
+        tfm_list += [(rules.greedy_t1_to_template.output.affine_xfm_ras, True),
+                     (rules.greedy_t1_to_template.output.invwarp, False)]
+    return tfm_list
 
 # Rule
 rule identify_regions:
     input:
         edf_tsv = region_id_inputs(),
-        # Other parameters
-        # parc = lambda wc: define_parc(wc, inputs.path['parc']),
-        parc = bids(
-                root='work',
-                datatype="anat",
-                **inputs.wildcards['T1w'],
-                desc="synthsegcortparc",
-                suffix="dseg.nii.gz"
-        ),
-        tmp_file = rules.greedy_t1_to_template.output.warped_flo,
-        # expand(inputs.path['parc'], zip, extension=['.mgz','.orig.mgz'], allow_missing=True),
-        tf = inputs.path['tf'],
+        parc = rules.fmriprep.output.aparc_aseg,
+        tfm_list = get_transforms,
     params:
-        reref_run = config['run_all'] or config['rereference'] or run_all
+        reref_run = config['run_all'] or config['rereference'] or run_all,
     group:
         "subj"
     output:
@@ -94,33 +96,3 @@ rule identify_regions:
         )
     script: join(workflow.basedir,'scripts/identify_regions.py')
 
-
-# # Rule to merge tsv files (there should be only for each initial edf file, not 1 for clip)
-# rule merge_regionsID:
-#     input:
-#         tsv_files = lambda wildcards: expand(rules.identify_regions.output.out_tsv, zip,
-#                                         clip=[f'{number:02}' for number in range(1, number_clips[f'subj_{wildcards.subject}'][f'ses_{wildcards.session}']+1)], 
-#                                         allow_missing=True),
-#     group:
-#         "merge_regions"
-#     output:
-#         out_tsv = bids(
-#                         root='bids',
-#                         datatype='ieeg',
-#                         suffix='regions_native_space.tsv',
-#                         rec='regionID',
-#                         **inputs.wildcards['ieeg']
-#                 ),
-#     benchmark:
-#        bids(
-#            root='benchmark',
-#            suffix='benchmarkMergeRegions.txt',
-#            **inputs.wildcards['ieeg']
-#        ),
-#     log:
-#         bids(
-#             root='logs',
-#             suffix='mergeRegions.log',
-#             **inputs.wildcards['ieeg']
-#         )   
-#     script: join(workflow.basedir,'scripts/merge_tsv.py')

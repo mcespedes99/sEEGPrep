@@ -13,7 +13,7 @@ from clean_seeg import cleanSEEG
 def main():
     edf_path, chn_tsv_path = snakemake.input.edf_tsv
     parc_path = snakemake.input.parc
-    noncon_to_con_tf_path = snakemake.input.tf
+    tfm_list = snakemake.input.tfm_list
     processes = snakemake.config['processes']
     out_edf = snakemake.output.out_edf
     out_tsv = snakemake.output.out_tsv
@@ -24,7 +24,7 @@ def main():
         # Call class
         seegTF = cleanSEEG(edf_path, # Using downsampled edf
                         chn_tsv_path,
-                        trsfPath = noncon_to_con_tf_path,
+                        tfm = tfm_list,
                         processes = processes)
         if not reref_run:
             print('reref not run before regions_id')

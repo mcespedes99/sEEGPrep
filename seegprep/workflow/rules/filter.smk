@@ -27,7 +27,7 @@ def filter_inputs():
 
 # Get transform file
 def get_tf(wildcards):
-    if tf_path != False:
+    if config['t1_to_coords_tfm'] != False:
         tf_path = expand(inputs.path['tf'], **wildcards)[0]
         if os.path.exists(tf_path):
             return tf_path

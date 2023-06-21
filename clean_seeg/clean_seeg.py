@@ -33,7 +33,7 @@ class cleanSEEG:
         self.noiseDetect = noiseDetect
         self.highpass = highpass # Set to None to shut down
         self.maxFlatlineDuration = maxFlatlineDuration
-        self.tfm = [] # has to be a list of tuple with format: (path, invert), with 'path' as str or tfm and invert as boolean
+        self.tfm = tfm # has to be a list of tuple with format: (path, invert), with 'path' as str or tfm and invert as boolean
         self.epoch_autoreject = epoch_autoreject
         self.processes = processes
         # Extra params 

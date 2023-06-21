@@ -14,6 +14,7 @@ import mne
 # from EDFlib.edfreader import EDFreader
 # from EDFlib.edfwriter import EDFwriter
 import sys
+import SimpleITK as sitk
 
 # Function to create bipolar channels from given unipolars
 def create_bipolar_comb(id, dict_key, channels_dict):
@@ -189,14 +190,39 @@ def get_colors_labels():
     return label_map
 
 # Function to get label id based on parcellation obj
-def get_electrodes_id(parc, elec_df, df_cols, non_cont_to_cont_tf):
+# TODO: test function in jupyter notebook
+def get_electrodes_id(parc, elec_df, df_cols, tfm_list):
     # Load data of parcellations
     data_parc = np.asarray(parc.dataobj)
     # Coordinates in MRI RAS
     mri_ras_mm = elec_df[[df_cols['x'],df_cols['y'],df_cols['z']]].values
     # print(mri_ras_mm)
+    # Apply transforms
+    for tfm, inv_bool in tfm_list:
+        if type(tfm)==str:
+            if tfm.endswith('txt'):
+                tfm = readRegMatrix(tfm)
+                if inv_bool:
+                    tfm = np.linalg.inv(tfm)
+                mri_ras_mm = mne.transforms.apply_trans(tfm, mri_ras_mm)
+            elif tfm.endswith('nii.gz'):
+                #reads the transform and casts the output compaitble format
+                transform_image = sitk.ReadImage(tfm)
+                transform_image = sitk.Cast(transform_image, sitk.sitkVectorFloat64)
+                # load it as a transform
+                identity_transform = sitk.Transform(transform_image)
+                # Convert points from RAS to LPS
+                mri_mni_lps = mri_ras_mm * np.array([-1, -1, 1])
+                # Transform
+                mri_mni_lps = identity_transform.TransformPoint(mri_mni_lps)
+                # Convert from LPS back to RAS
+                mri_ras_mm = mri_mni_lps * np.array([-1, -1, 1])
+        else:
+            if inv_bool:
+                tfm = np.linalg.inv(tfm)
+            mri_ras_mm = mne.transforms.apply_trans(tfm, mri_ras_mm)
     # Transform from contrast mri ras to non-contrast MRI ras
-    mri_ras_mm = mne.transforms.apply_trans(non_cont_to_cont_tf, mri_ras_mm)
+    # mri_ras_mm = mne.transforms.apply_trans(non_cont_to_cont_tf, mri_ras_mm)
     # Update position of electrodes in df 
     elec_df[df_cols['x']] = mri_ras_mm[:,0]
     elec_df[df_cols['y']] = mri_ras_mm[:,1]
@@ -211,9 +237,9 @@ def get_electrodes_id(parc, elec_df, df_cols, non_cont_to_cont_tf):
     return id, elec_df
 
 # Function to get rgb values for each contact
-def get_label_rgb(parc, elec_df, non_cont_to_cont_tf, label_map, df_cols):
+def get_label_rgb(parc, elec_df, tfm_list, label_map, df_cols):
     # vox, data_parc = ras2vox(parc, elec_df, non_cont_to_cont_tf)
-    id, elec_df = get_electrodes_id(parc, elec_df, non_cont_to_cont_tf, df_cols)
+    id, elec_df = get_electrodes_id(parc, elec_df, df_cols, tfm_list)
     vals = label_map.loc[id, ['Label','R', 'G', 'B']].to_numpy()
     vals = np.c_[id,vals]
     vals = pd.DataFrame(data=vals, columns=['Label ID','Label','R', 'G', 'B'])
@@ -226,18 +252,17 @@ def readRegMatrix(trsfPath):
 		return np.loadtxt(f.readlines())
 
 # Function to create tsv with bipolar channels info
-def extract_location(parc_path, chn_info_df, df_cols, noncon_to_con_tf_path):
+def extract_location(parc_path, chn_info_df, df_cols, tfm_list):
     import os
     # Load labels from LUT file
     labels = get_colors_labels()
     # Load parcellation file
     parc_obj = nb.load(parc_path)
-    data_parc = np.asarray(parc_obj.dataobj)
     # The transform file goes from contrast to non-contrast. The tfm, when loaded in slicer actually goes
     # from non-contrast to contrast but the txt is inversed!
     t1_transform=readRegMatrix(noncon_to_con_tf_path)
     # Create df
-    df = get_label_rgb(parc_obj, chn_info_df, t1_transform, labels, df_cols)
+    df = get_label_rgb(parc_obj, chn_info_df, tfm_list, labels, df_cols)
     # if not os.path.exists(out_tsv_name):
     #     df.to_csv(out_tsv_name, sep = '\t')
     return df
