@@ -102,8 +102,8 @@ pybids_inputs:
       - run
     custom_path: '/project/ctb-akhanf/cfmm-bids/Khan/clinical_imaging/epi_iEEG/derivatives/atlasreg/sub-P{subject}/sub-P{subject}_T1w.nii.gz'
 
-freesurf_dir: '/home/mcesped/projects/ctb-akhanf/cfmm-bids/Khan/clinical_imaging/epi_iEEG/derivatives/fastsurfer/'
-freesurf_patient_label: 'sub-P{subject}'
+freesurf_dir: None #'/home/mcesped/projects/ctb-akhanf/cfmm-bids/Khan/clinical_imaging/epi_iEEG/derivatives/fastsurfer/'
+freesurf_patient_label: None #'sub-P{subject}'
 
 # ---------------- Pipeline parameters-------------------
 # 1. Parameters for downsampling step:
@@ -139,7 +139,7 @@ n_harmonics: 1
 # (2.f) Boolean to define whether to run autoreject to find noisy segments
 # of data or not. 
 # Default: True (runs autoreject)
-noiseDetect: True
+noiseDetect: False
 
 # (2.g) Transition band of high pass filter used in detrending step (if selected)
 highpass: [0.1, 0.2]
@@ -166,9 +166,11 @@ discard_wm_un: True
 tsv_cols: ['type', 'label', 'x', 'y', 'z', 'orig_group']
 
 # Space to identify regions: 'subject' or 'MNI'
-space_regions: 'MNI'
+space_regions: 'subject'
 
-t1_to_coords_tfm: True
+t1_to_coords_tfm: False 
+# Transform is not required in my case as I'm using T1w.nii.gz file, which is always in
+# the same position as the electrodes coordinates (contrast space)
 
 # Templates
 # template: MNI152NLin2009cAsym
@@ -180,6 +182,8 @@ template_mask: resources/tpl-MNI152NLin2009cSym/tpl-MNI152NLin2009cSym_res-1_des
 # template: MNI305
 # template_t1w: resources/tpl-MNI305/tpl-MNI305_T1w.nii.gz
 # template_mask: resources/tpl-MNI305/tpl-MNI305_desc-brain_mask.nii.gz 
+atlas_template: resources/tpl-MNI152NLin2009cSym/atlas/aal116_roi_atlas.nii.gz
+colortable: resources/tpl-MNI152NLin2009cSym/atlas/aal_labels.tsv
 
 
 #-------------------------------BIDS APP Configuration---------------------------

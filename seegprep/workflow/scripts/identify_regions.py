@@ -12,8 +12,8 @@ from clean_seeg import cleanSEEG
 
 def main():
     edf_path, chn_tsv_path = snakemake.input.edf_tsv
-    parc_path = snakemake.input.parc
-    tfm_list = snakemake.input.tfm_list
+    parc_path, colortable_file = snakemake.input.parc
+    tfm_list = snakemake.params.tfm_list
     processes = snakemake.config['processes']
     out_edf = snakemake.output.out_edf
     out_tsv = snakemake.output.out_tsv
@@ -32,26 +32,19 @@ def main():
             dict_keys = ['type','label','x','y','z','group']
             dict_vals = snakemake.config['tsv_cols']
             df_cols = dict(zip(dict_keys, dict_vals))
-            # df_cols = { # TODO: change to parameter in config file!
-            #         'type': 'type',
-            #         'label': 'label',
-            #         'x': 'x',
-            #         'y': 'y',
-            #         'z': 'z',
-            #         'group': 'orig_group'
-            #     }
         else:
             df_cols = None
         # Identify regions
         df = seegTF.identify_regions(parc_path,
-                                use_reref = False,
-                                write_tsv = True,
-                                out_tsv_path = out_tsv,
-                                df_cols = df_cols, ## Using default as it was written in previous step
-                                use_clean = False,
-                                discard_wm_un = snakemake.config['discard_wm_un'],
-                                write_edf = True,
-                                out_edf_path = out_edf)
+                                     colortable_file,
+                                     use_reref = False,
+                                     write_tsv = True,
+                                     out_tsv_path = out_tsv,
+                                     df_cols = df_cols, ## Using default as it was written in previous step
+                                     use_clean = False,
+                                     discard_wm_un = snakemake.config['discard_wm_un'],
+                                     write_edf = True,
+                                     out_edf_path = out_edf)
     except:
         logging.exception('Got exception on main handler')
         raise

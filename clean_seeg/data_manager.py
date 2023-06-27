@@ -30,9 +30,9 @@ def create_bipolar_combi(id, bipolar_list):
 
 # Function to discard 
 def apply_bipolar_criteria(df_bipolar, bipolar_list, processes):
-    non_white_matter_unknown_bool = df_bipolar['Label'].str.contains('White-Matter|Unknown',
+    non_white_matter_unknown_bool = df_bipolar['region name'].str.contains('White-Matter|Unknown',
                                                                     case=False, regex=True)==False
-    ids = df_bipolar.loc[non_white_matter_unknown_bool, 'Label'].index.values.tolist()
+    ids = df_bipolar.loc[non_white_matter_unknown_bool, 'region name'].index.values.tolist()
     # print(ids)
     # Extract bipolar list (original channels + bipolar channel)
     with Pool(processes=processes) as pool:
@@ -161,33 +161,38 @@ def extract_channel_header(chn_number, original_headers, chn_list, channels_labe
     return chn_header
 
 # Function to get label map
-def get_colors_labels():
-    __location__ = os.path.realpath(
-    os.path.join(os.getcwd(), os.path.dirname(__file__)))
-    path_LUT = os.path.join(__location__, 'FreeSurferColorLUT.txt')
-    with open(path_LUT, 'r') as f:
-        raw_lut = f.readlines()
-
-    # read and process line by line
-    label_map = pd.DataFrame(columns=['Label', 'R', 'G', 'B'])
-    for line in raw_lut:
-        # Remove empty spaces
-        line = line.strip()
-        if not (line.startswith('#') or not line):
-            s = line.split()
-            # info = list(filter(None, info))
-            id = int(s[0])
-            info_s = {
-                'Label': s[1],
-                'R': int(s[2]),
-                'G': int(s[3]),
-                'B': int(s[4])
-            }
-            # info_s['A'] = 0 if (info_s['R']==0 & info_s['G']==0 & info_s['B']==0) else 255
-            info_s = pd.DataFrame(info_s, index=[id])
-            label_map = pd.concat([label_map,info_s], axis=0)
-        label_map[['R','G','B']] = label_map[['R','G','B']].astype('int64')
-    return label_map
+def get_colors_labels(colortable_file):
+    colortable = pd.read_table(colortable_file, index_col='index')
+    cols = colortable.columns
+    if ('r' in cols) and ('g' in cols) and ('b' in cols):
+        colortable[['r','g','b']] = colortable[['r','g','b']].astype('int64')
+    else:
+        # Generate random colors
+        rgb = set()
+        while len(rgb) < len(colortable.index):
+            r, g, b = np.random.randint(0, 256), np.random.randint(0, 256), np.random.randint(0, 256)
+            if (r,g,b) not in rgb and (r,g,b)!=(0,0,0): #(0,0,0) reserved for unknown
+                rgb.add((r,g,b))
+        r,g,b = zip(*rgb)
+        # Add to dataframe
+        colortable['r'] = r
+        colortable['g'] = g
+        colortable['b'] = b
+    # Append element '0' (unknown) if doesn't exist
+    if 0 not in colortable.index:
+        unknown_dict = {
+            'name': ['Unknown'],
+            'r': [0],
+            'b': [0],
+            'g': [0]
+        }
+        for column in cols:
+            if column not in unknown_dict:
+                unknown_dict[column]=['']
+        # Concatenate dataframes
+        tmp_df = pd.DataFrame(unknown_dict)
+        colortable = pd.concat([tmp_df, colortable])
+    return colortable
 
 # Function to get label id based on parcellation obj
 # TODO: test function in jupyter notebook
@@ -214,7 +219,8 @@ def get_electrodes_id(parc, elec_df, df_cols, tfm_list):
                 # Convert points from RAS to LPS
                 mri_mni_lps = mri_ras_mm * np.array([-1, -1, 1])
                 # Transform
-                mri_mni_lps = identity_transform.TransformPoint(mri_mni_lps)
+                for point_id in range(mri_mni_lps.shape[0]):
+                    mri_mni_lps[point_id, :] = np.array(identity_transform.TransformPoint(mri_mni_lps[point_id, :]))
                 # Convert from LPS back to RAS
                 mri_ras_mm = mri_mni_lps * np.array([-1, -1, 1])
         else:
@@ -240,9 +246,12 @@ def get_electrodes_id(parc, elec_df, df_cols, tfm_list):
 def get_label_rgb(parc, elec_df, tfm_list, label_map, df_cols):
     # vox, data_parc = ras2vox(parc, elec_df, non_cont_to_cont_tf)
     id, elec_df = get_electrodes_id(parc, elec_df, df_cols, tfm_list)
-    vals = label_map.loc[id, ['Label','R', 'G', 'B']].to_numpy()
+    print(label_map)
+    print(id)
+    print(label_map.loc[id, ['name','r', 'g', 'b']])
+    vals = label_map.loc[id, ['name','r', 'g', 'b']].to_numpy()
     vals = np.c_[id,vals]
-    vals = pd.DataFrame(data=vals, columns=['Label ID','Label','R', 'G', 'B'])
+    vals = pd.DataFrame(data=vals, columns=['region ID','region name','r', 'g', 'b'])
     vals = pd.concat([elec_df, vals], axis=1)
     return vals
 
@@ -252,15 +261,12 @@ def readRegMatrix(trsfPath):
 		return np.loadtxt(f.readlines())
 
 # Function to create tsv with bipolar channels info
-def extract_location(parc_path, chn_info_df, df_cols, tfm_list):
+def extract_location(parc_path, chn_info_df, df_cols, tfm_list, colortable_file):
     import os
     # Load labels from LUT file
-    labels = get_colors_labels()
+    labels = get_colors_labels(colortable_file)
     # Load parcellation file
     parc_obj = nb.load(parc_path)
-    # The transform file goes from contrast to non-contrast. The tfm, when loaded in slicer actually goes
-    # from non-contrast to contrast but the txt is inversed!
-    t1_transform=readRegMatrix(noncon_to_con_tf_path)
     # Create df
     df = get_label_rgb(parc_obj, chn_info_df, tfm_list, labels, df_cols)
     # if not os.path.exists(out_tsv_name):

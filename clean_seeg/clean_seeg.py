@@ -158,6 +158,7 @@ class cleanSEEG:
     
     def identify_regions(self,
                          aparc_aseg_path,
+                         colortable_file, # colortable has to be a tsv with at least index, name
                          use_reref = True,
                          write_tsv = False,
                          out_tsv_path = None,
@@ -193,7 +194,7 @@ class cleanSEEG:
             edf.close()
             chn_info_df, chn_list, df_cols = get_chn_info(self.chn_csv_path, elec_edf, df_cols = df_cols) #, conf=conf
         # Create tsv file with information about location of the channels
-        df_location = extract_location(aparc_aseg_path, self.tfm, chn_info_df, df_cols)
+        df_location = extract_location(aparc_aseg_path, chn_info_df, df_cols, self.tfm, colortable_file)
         if write_tsv:
             if os.path.exists(out_tsv_path):
                 logging.warning(f" tsv file {out_tsv_path} will be overwritten.")
@@ -413,12 +414,20 @@ class cleanSEEG:
             # print('PLI removal completed.')
             
             # Second, identify noisy segments and highpass filter the data
-            clean, interpolated, df_epochs = self.noiseDetect_raw(signal, elec_edf, 
-                                                                    return_interpolated=True,
-                                                                    verbose = verbose)
-            
-            # Update number of removed elements after autoreject
-            n_removed.append(clean.shape[-1]-interpolated.shape[-1])
+            if self.noiseDetect and return_interpolated:
+                clean, interpolated, df_epochs = self.noiseDetect_raw(signal, elec_edf, 
+                                                                        return_interpolated=True,
+                                                                        verbose = verbose)
+                # Update number of removed elements after autoreject
+                n_removed.append(clean.shape[-1]-interpolated.shape[-1])
+            elif self.noiseDetect:
+                clean, df_epochs = self.noiseDetect_raw(signal, elec_edf, 
+                                                        return_interpolated=False,
+                                                        verbose = verbose)
+            else:
+                clean = self.noiseDetect_raw(signal, elec_edf, 
+                                            return_interpolated=False,
+                                            verbose = verbose)
 
             # Write edfs if requested
             if write_edf_clean:
@@ -431,7 +440,7 @@ class cleanSEEG:
                 del clean_list
                 self.clean_edf = out_edf_path_clean
             
-            if write_edf_int:
+            if write_edf_int and self.noiseDetect:
                 # Interpolated signal
                 logging.critical('Currently, writing the EDF file for the interpolated signal is not supported.')
                 # convert to list
@@ -443,7 +452,7 @@ class cleanSEEG:
                 # self.inter_edf = out_edf_path_int
             
             # Write tsv with noise data
-            if write_tsv:
+            if write_tsv and self.noiseDetect:
                 if os.path.exists(out_tsv_path):
                     logging.warning(f" tsv file {out_tsv_path} will be overwritten.")
                 df_epochs.to_csv(out_tsv_path, index=False, sep = '\t')
@@ -468,7 +477,7 @@ class cleanSEEG:
         import nibabel as nb
         import os
         print(raw.shape)
-        if self.subject == None or self.subjects_dir == None:
+        if self.noiseDetect and (self.subject == None or self.subjects_dir == None):
             raise Exception('Please indicate a valid subject and directory for the freesurfer outputs.')
         # Remove drifts (highpass data) if required
         if self.highpass != None:
@@ -481,51 +490,54 @@ class cleanSEEG:
         #     print('Removing flatlines')
         #     raw = clean_flatlines(raw,self.srate,maxFlatlineDuration=self.maxFlatlineDuration)
         # print(raw.shape)
-        #---------------Run automatic detection of noise using autoreject-------------------
-        print('Running autoreject')
-        chn_pos = get_chn_positions(self.chn_csv_path, electrodes_edf, self.tfm)
-        # Channels to extract
-        keys = list(chn_pos.keys())
-        # Number of samples
-        N = raw.shape[-1]
-        # Create time vector using srate
-        t = np.arange(0, N)/self.srate
+        if self.noiseDetect:
+            #---------------Run automatic detection of noise using autoreject-------------------
+            print('Running autoreject')
+            chn_pos = get_chn_positions(self.chn_csv_path, electrodes_edf, self.tfm)
+            # Channels to extract
+            keys = list(chn_pos.keys())
+            # Number of samples
+            N = raw.shape[-1]
+            # Create time vector using srate
+            t = np.arange(0, N)/self.srate
 
-        # Create sEEG montage
-        montage = get_montage(chn_pos, self.subject, self.subjects_dir)
-        # Initiate csv epoch file
-        cols = ['Epoch #', 'Start ID', 'End ID']+keys
-        # Create MNE epochs
-        mne_epochs, epochs_ids, n_missed = create_mne_epochs(raw, keys, self.srate, montage, self.epoch_autoreject)
-        # Update IDs
-        start_IDs = epochs_ids['Start ID']
-        end_IDs = epochs_ids['End ID']
+            # Create sEEG montage
+            montage = get_montage(chn_pos, self.subject, self.subjects_dir)
+            # Initiate csv epoch file
+            cols = ['Epoch #', 'Start ID', 'End ID']+keys
+            # Create MNE epochs
+            mne_epochs, epochs_ids, n_missed = create_mne_epochs(raw, keys, self.srate, montage, self.epoch_autoreject)
+            # Update IDs
+            start_IDs = epochs_ids['Start ID']
+            end_IDs = epochs_ids['End ID']
 
-        # Run autoreject
-        epochs_ar, noise_labels = run_autoreject(mne_epochs, verbose = verbose)
-        # Create noise df
-        # Start-end IDs for each epoch
-        IDs_array = np.array([start_IDs,end_IDs]).T
-        # Epoch numbering
-        epoch_num = np.arange(1, 1+len(start_IDs))
-        noise_array = np.c_[epoch_num, IDs_array, noise_labels]
-        df_epochs = pd.DataFrame(data = noise_array, columns = cols)
+            # Run autoreject
+            epochs_ar, noise_labels = run_autoreject(mne_epochs, verbose = verbose)
+            # Create noise df
+            # Start-end IDs for each epoch
+            IDs_array = np.array([start_IDs,end_IDs]).T
+            # Epoch numbering
+            epoch_num = np.arange(1, 1+len(start_IDs))
+            noise_array = np.c_[epoch_num, IDs_array, noise_labels]
+            df_epochs = pd.DataFrame(data = noise_array, columns = cols)
 
-        # Return interpolated signal only if requested!
-        if return_interpolated:
-            # Reshape to n_chn x n_time
-            clean_sig = epochs_ar.get_data()
-            print(clean_sig.shape)
-            clean_sig = clean_sig.swapaxes(0,1).reshape(len(keys),-1)
-            # Attach the non-clean part of the signal
-            if n_missed != 0:
-                # print(n_missed)
-                # print(signal[:,-n_missed:])
-                sig_missed = raw[:,-n_missed]
-                if sig_missed.ndim == 1:
-                    sig_missed = sig_missed.reshape(-1,1)
-            clean_sig = np.hstack([clean_sig, sig_missed])
-            return raw, clean_sig, df_epochs
+            # Return interpolated signal only if requested!
+            if return_interpolated:
+                # Reshape to n_chn x n_time
+                clean_sig = epochs_ar.get_data()
+                print(clean_sig.shape)
+                clean_sig = clean_sig.swapaxes(0,1).reshape(len(keys),-1)
+                # Attach the non-clean part of the signal
+                if n_missed != 0:
+                    # print(n_missed)
+                    # print(signal[:,-n_missed:])
+                    sig_missed = raw[:,-n_missed]
+                    if sig_missed.ndim == 1:
+                        sig_missed = sig_missed.reshape(-1,1)
+                clean_sig = np.hstack([clean_sig, sig_missed])
+                return raw, clean_sig, df_epochs
+            else:
+                return raw, df_epochs
         else:
-            return raw, df_epochs
+            return raw
 

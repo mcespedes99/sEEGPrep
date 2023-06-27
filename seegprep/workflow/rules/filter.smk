@@ -38,13 +38,21 @@ def get_tf(wildcards):
 rule filter_data:
     input:
         edf = filter_inputs(),
+        tsv = inputs.path['seega_tsv'], # Turned off for now
         # Other parameters
-        tsv = inputs.path['seega_tsv'],
-        t1 = 'derivatives/freesurfer/sub-{subject}/mri/T1.mgz',
+        # t1 = 'derivatives/freesurfer/sub-{subject}/mri/T1.mgz',
     params:
         freesurf_dir = config['freesurf_dir'],
         freesurf_patient = config['freesurf_patient_label'],
         tf = get_tf,
+        out_tsv = join(config['output_dir'],
+                    bids(
+                        root='bids',
+                        datatype='ieeg',
+                        suffix='noisy_data.tsv',
+                        rec='denoise',
+                        **out_edf_wc
+                    )),
     group:
         "subj"
     output:
@@ -52,13 +60,6 @@ rule filter_data:
                         root=out_dir_filt(),
                         datatype='ieeg',
                         suffix='ieeg.edf',
-                        rec='denoise',
-                        **out_edf_wc
-                ),
-        out_tsv = bids(
-                        root='bids',
-                        datatype='ieeg',
-                        suffix='noisy_data.tsv',
                         rec='denoise',
                         **out_edf_wc
                 ),

@@ -1,10 +1,14 @@
+# Create work folder
+if not os.path.exists(join(config['output_dir'], 'work/fmriprep')):
+    os.makedirs(join(config['output_dir'], 'work/fmriprep'))
+
 rule fmriprep:
     input:
         t1 = rules.mask_subject_t1w.output.t1,
         fs_license=os.environ["FS_LICENSE"] if config["fs_license"] == False else config["fs_license"],
     params:
         synthstrip_dir=join(config['output_dir'], bids(root="work", suffix="synthstrip")),
-        fmriprep_outdir=join(config['output_dir'], bids(root="derivatives")),
+        fmriprep_outdir=join(config['output_dir'], "derivatives"),
         dataset_description=join(
             workflow.basedir, "../resources/dataset_description.json"
         ),
@@ -12,7 +16,11 @@ rule fmriprep:
         fmriprep_opts='--anat-only --skip_bids_validation --notrack --skull-strip-t1w skip',
         container = config["singularity"]["graham"]["fmriprep"],
     output:
-        aparc_aseg = 'derivatives/freesurfer/sub-{subject}/mri/aparc+aseg.mgz',
+        done=touch(
+            bids(root="work", suffix="fmriprep.done", **inputs.wildcards["T1w"])
+        )
+        # aparc_aseg = 'derivatives/freesurfer/sub-{subject}/mri/aparc+aseg.mgz',
+        # t1_mgz = 'derivatives/freesurfer/sub-{subject}/mri/T1.mgz',
     # container:
     #     config["singularity"]["graham"]["fmriprep"]
     group:

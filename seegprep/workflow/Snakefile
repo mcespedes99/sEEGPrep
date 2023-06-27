@@ -6,6 +6,7 @@ from os.path import join
 import pandas as pd
 import numpy as np
 import copy
+import os
 
 configfile: workflow.source_path('../config/snakebids.yml')
 
@@ -116,7 +117,7 @@ else:
 # Add rules in order
 include: "rules/preproc_t1.smk"
 include: "rules/synthseg.smk"
-include: "rules/fmriprep.smk"
+# include: "rules/fmriprep.smk"
 include: "rules/reg_t1_to_template.smk"
 ## Epoch extraction rule
 if config['epoch'] or config['run_all'] or run_all:
@@ -180,7 +181,13 @@ def define_all_inputs():
     elif config['epoch']:
         return rules.get_epoch_files.output
     elif config['anat']:
-        dseg = rules.fmriprep.output.aparc_aseg
+        dseg = bids(
+                root='work',
+                datatype="anat",
+                **inputs.wildcards['T1w'],
+                desc="synthsegcortparc",
+                suffix="dseg.nii.gz"
+                )
         tmp_file = rules.greedy_t1_to_template.output.warped_flo[-1]
         return dseg, tmp_file
     # Else: default case run_all

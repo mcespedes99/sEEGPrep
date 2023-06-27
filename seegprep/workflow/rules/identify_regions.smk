@@ -29,7 +29,18 @@ def region_id_inputs():
         #print('reref before regionsID (run all)')
         return rules.PLI_reject.output.out_edf, rules.rereference.output.out_tsv
 
-# def define_parc(wildcards, parc_path):
+def define_parc(wildcards): #, parc_path
+    if config['space_regions'] == 'subject':
+        dseg = bids(
+                root='work',
+                datatype="anat",
+                **inputs.wildcards['T1w'],
+                desc="synthsegcortparc",
+                suffix="dseg.nii.gz"
+                )
+        return dseg, os.path.join(workflow.basedir, "../resources/tpl-MNI305/atlas/FreeSurferColorLUT.tsv")
+    elif config['space_regions'] == 'MNI':
+        return os.path.join(workflow.basedir, "..", config['atlas_template']), os.path.join(workflow.basedir, "..", config['colortable'])
 #     parc_options = expand(parc_path, extension=['.mgz','.orig.mgz'], **wildcards)
 #     # print(parc_options)
 #     parc_cleaned = []
@@ -47,21 +58,37 @@ def get_transforms(wildcards):
     if config['t1_to_coords_tfm'] != False:
         tf_path = expand(inputs.path['tf'], **wildcards)[0]
         if os.path.exists(tf_path):
+            tfm_list.append(tf_path)
+    # If segmentation based on MNI, include warps and affine tfms
+    if config['space_regions'] == 'MNI':
+        tfm_list += [rules.greedy_t1_to_template.output.affine_xfm_ras,
+                     rules.greedy_t1_to_template.output.invwarp]
+    return tfm_list
+
+def get_tfms(wildcards):
+    tfm_list = []
+    # Include non-contrast to contrast space if necessary
+    if config['t1_to_coords_tfm'] != False:
+        tf_path = expand(inputs.path['tf'], **wildcards)[0]
+        if os.path.exists(tf_path):
             tfm_list += [(tf_path, False)]
     # If segmentation based on MNI, include warps and affine tfms
     if config['space_regions'] == 'MNI':
-        tfm_list += [(rules.greedy_t1_to_template.output.affine_xfm_ras, True),
-                     (rules.greedy_t1_to_template.output.invwarp, False)]
+        affine_xfm_ras = expand(rules.greedy_t1_to_template.output.affine_xfm_ras, **wildcards)[0]
+        invwarp = expand(rules.greedy_t1_to_template.output.invwarp,**wildcards)[0]
+        tfm_list = [(affine_xfm_ras, True), 
+                    (invwarp,False)]
     return tfm_list
 
 # Rule
 rule identify_regions:
     input:
         edf_tsv = region_id_inputs(),
-        parc = rules.fmriprep.output.aparc_aseg,
+        parc = define_parc,
         tfm_list = get_transforms,
     params:
         reref_run = config['run_all'] or config['rereference'] or run_all,
+        tfm_list = get_tfms,
     group:
         "subj"
     output:
