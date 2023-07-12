@@ -39,6 +39,8 @@ rule run_synthseg_withcortparc:
     container:
         config["singularity"]["graham"]["diffparc"]
     threads: 8
+    resources:
+        mem_mb=16000,  # right now these are on the high-end -- could implement benchmark rules to do this at some point..
     group:
         "anat"
     shell:

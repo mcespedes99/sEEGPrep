@@ -33,6 +33,7 @@ pybids_inputs:
       suffix: 'ieeg'
       extension: '.edf'
       datatype: 'ieeg'
+      task: 'full'
     wildcards:
       - subject
       - session
@@ -63,7 +64,7 @@ pybids_inputs:
       - acquisition
       - task
       - run
-    custom_path: '/home/mcesped/projects/ctb-akhanf/cfmm-bids/Khan/clinical_imaging/epi_iEEG/derivatives/seega_coordinates/sub-P{subject}/sub-P{subject}_space-native_SEEGA.tsv'
+    custom_path: '/home/mcesped/projects/ctb-akhanf/cfmm-bids/Khan/clinical_imaging/epi_iEEG/old_bids/derivatives/seega_coordinates/sub-P{subject}/sub-P{subject}_space-native_SEEGA.tsv'
 
   parc:
     filters:
@@ -75,7 +76,7 @@ pybids_inputs:
       - acquisition
       - task
       - run
-    custom_path: /home/mcesped/projects/ctb-akhanf/cfmm-bids/Khan/clinical_imaging/epi_iEEG/derivatives/fastsurfer/sub-P{subject}/mri/aparc+aseg{extension}
+    custom_path: /home/mcesped/projects/ctb-akhanf/cfmm-bids/Khan/clinical_imaging/epi_iEEG/old_bids/derivatives/fastsurfer/sub-P{subject}/mri/aparc+aseg{extension}
 
   tf:
     filters:
@@ -87,8 +88,8 @@ pybids_inputs:
       - acquisition
       - task
       - run
-    custom_path: '/home/mcesped/projects/ctb-akhanf/cfmm-bids/Khan/clinical_imaging/epi_iEEG/derivatives/atlasreg/sub-P{subject}/sub-P{subject}_desc-rigid_from-noncontrast_to-contrast_type-ras_xfm.txt'
-    # custom_path: '/home/mcesped/projects/ctb-akhanf/cfmm-bids/Khan/clinical_imaging/epi_iEEG/derivatives/atlasreg/sub-P{subject}/sub-P{subject}_acq-noncontrast_desc-rigid_from-noncontrast_to-contrast_type-ras_xfm.txt'
+    custom_path: '/home/mcesped/projects/ctb-akhanf/cfmm-bids/Khan/clinical_imaging/epi_iEEG/old_bids/derivatives/atlasreg/sub-P{subject}/sub-P{subject}_desc-rigid_from-noncontrast_to-contrast_type-ras_xfm.txt'
+    # custom_path: '/home/mcesped/projects/ctb-akhanf/cfmm-bids/Khan/clinical_imaging/epi_iEEG/old_bids/derivatives/atlasreg/sub-P{subject}/sub-P{subject}_acq-noncontrast_desc-rigid_from-noncontrast_to-contrast_type-ras_xfm.txt'
 
   T1w:
     filters:
@@ -100,9 +101,9 @@ pybids_inputs:
       - acquisition
       - task
       - run
-    custom_path: '/project/ctb-akhanf/cfmm-bids/Khan/clinical_imaging/epi_iEEG/derivatives/atlasreg/sub-P{subject}/sub-P{subject}_T1w.nii.gz'
+    custom_path: '/project/ctb-akhanf/cfmm-bids/Khan/clinical_imaging/epi_iEEG/old_bids/derivatives/atlasreg/sub-P{subject}/sub-P{subject}_T1w.nii.gz'
 
-freesurf_dir: None #'/home/mcesped/projects/ctb-akhanf/cfmm-bids/Khan/clinical_imaging/epi_iEEG/derivatives/fastsurfer/'
+freesurf_dir: None #'/home/mcesped/projects/ctb-akhanf/cfmm-bids/Khan/clinical_imaging/epi_iEEG/old_bids/derivatives/fastsurfer/'
 freesurf_patient_label: None #'sub-P{subject}'
 
 # ---------------- Pipeline parameters-------------------
@@ -166,7 +167,7 @@ discard_wm_un: True
 tsv_cols: ['type', 'label', 'x', 'y', 'z', 'orig_group']
 
 # Space to identify regions: 'subject' or 'MNI'
-space_regions: 'subject'
+space_regions: 'MNI'
 
 t1_to_coords_tfm: False 
 # Transform is not required in my case as I'm using T1w.nii.gz file, which is always in
@@ -182,7 +183,7 @@ template_mask: resources/tpl-MNI152NLin2009cSym/tpl-MNI152NLin2009cSym_res-1_des
 # template: MNI305
 # template_t1w: resources/tpl-MNI305/tpl-MNI305_T1w.nii.gz
 # template_mask: resources/tpl-MNI305/tpl-MNI305_desc-brain_mask.nii.gz 
-atlas_template: resources/tpl-MNI152NLin2009cSym/atlas/aal116_roi_atlas.nii.gz
+atlas_template: resources/tpl-MNI152NLin2009cSym/atlas/aal116_roi_atlas.nii
 colortable: resources/tpl-MNI152NLin2009cSym/atlas/aal_labels.tsv
 
 
