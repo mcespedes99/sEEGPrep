@@ -46,6 +46,7 @@ pybids_inputs:
       suffix: 'annotations'
       extension: '.tsv'
       datatype: 'ieeg'
+      task: 'full'
     wildcards:
       - subject
       - session
