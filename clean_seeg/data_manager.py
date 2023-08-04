@@ -298,6 +298,7 @@ def get_electrodes_id(parc, elec_df, df_cols, tfm_list):
         (vox[:, 0] >= data_parc.shape[0]).any()
         or (vox[:, 1] >= data_parc.shape[1]).any()
         or (vox[:, 2] >= data_parc.shape[2]).any()
+        or (vox < 0).any()  # If any of the elements is pointing to a 'negative index'
     ):
         id = []
         for idx in range(vox.shape[0]):
@@ -306,6 +307,7 @@ def get_electrodes_id(parc, elec_df, df_cols, tfm_list):
                 (vox[idx, 0] >= data_parc.shape[0])
                 or (vox[idx, 1] >= data_parc.shape[1])
                 or (vox[idx, 2] >= data_parc.shape[2])
+                or (vox[idx, :] < 0).any()
             ):
                 id.append(0)
             else:
