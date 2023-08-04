@@ -43,7 +43,7 @@ pybids_inputs:
   
   annotations:
     filters:
-      suffix: 'annotations'
+      suffix: 'events'
       extension: '.tsv'
       datatype: 'ieeg'
       task: 'full'
