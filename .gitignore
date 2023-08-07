@@ -4,3 +4,4 @@ Results/
 *.ipynb_checkpoints/*
 clean_seeg/__pycache__/*
 backup/
+.vscode/
