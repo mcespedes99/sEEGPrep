@@ -10,11 +10,13 @@ sys.path.append(path)
 # Import cleanSEEG
 from clean_seeg import cleanSEEG
 
+
 def main():
     edf_path, chn_tsv_path = snakemake.input.edf_tsv
-    parc_path, colortable_file = snakemake.input.parc
-    tfm_list = snakemake.params.tfm_list
-    processes = snakemake.config['processes']
+    parc_path = snakemake.input.parc
+    colortable_file = snakemake.params.colortable
+    tfm = snakemake.input.tfm
+    processes = snakemake.config["processes"]
     out_edf = snakemake.output.out_edf
     out_tsv = snakemake.output.out_tsv
     reref_run = snakemake.params.reref_run
@@ -22,32 +24,37 @@ def main():
     logging.basicConfig(filename=LOG_FILENAME, level=logging.DEBUG)
     try:
         # Call class
-        seegTF = cleanSEEG(edf_path, # Using downsampled edf
-                        chn_tsv_path,
-                        tfm = tfm_list,
-                        processes = processes)
+        seegTF = cleanSEEG(
+            edf_path,  # Using downsampled edf
+            chn_tsv_path,
+            tfm=[(tfm, False)],
+            processes=processes,
+        )
         if not reref_run:
-            print('reref not run before regions_id')
+            print("reref not run before regions_id")
             # Define names of columns in tsv file
-            dict_keys = ['type','label','x','y','z','group']
-            dict_vals = snakemake.config['tsv_cols']
+            dict_keys = ["type", "label", "x", "y", "z", "group"]
+            dict_vals = snakemake.config["tsv_cols"]
             df_cols = dict(zip(dict_keys, dict_vals))
         else:
             df_cols = None
         # Identify regions
-        df = seegTF.identify_regions(parc_path,
-                                     colortable_file,
-                                     use_reref = False,
-                                     write_tsv = True,
-                                     out_tsv_path = out_tsv,
-                                     df_cols = df_cols, ## Using default as it was written in previous step
-                                     use_clean = False,
-                                     discard_wm_un = snakemake.config['discard_wm_un'],
-                                     write_edf = True,
-                                     out_edf_path = out_edf)
+        df = seegTF.identify_regions(
+            parc_path,
+            colortable_file,
+            use_reref=False,
+            write_tsv=True,
+            out_tsv_path=out_tsv,
+            df_cols=df_cols,  ## Using default as it was written in previous step
+            use_clean=False,
+            discard_wm_un=snakemake.config["discard_wm_un"],
+            write_edf=True,
+            out_edf_path=out_edf,
+        )
     except:
-        logging.exception('Got exception on main handler')
+        logging.exception("Got exception on main handler")
         raise
 
-if __name__=="__main__":
+
+if __name__ == "__main__":
     main()

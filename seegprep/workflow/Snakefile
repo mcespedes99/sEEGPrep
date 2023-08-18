@@ -103,22 +103,16 @@ else:
     input_ziplist = inputs.zip_lists['ieeg']
     out_edf_wc = inputs.wildcards['ieeg']
 
-# print(input_ziplist)
-# print(out_edf_wc)
-# out_edf = bids(
-#                         root='bids',
-#                         datatype='ieeg',
-#                         suffix='ieeg.edf',
-#                         rec='PLIreject',
-#                         **out_edf_wc
-#                 )
-# print(out_edf)
+# Get mapping from 7T to clinical
+snsx_clinical_df = pd.read_csv(os.path.join(workflow.basedir, "..", config['clinical_snsx']), sep='\t')
+mapping_clinical_to_7T = dict(zip(snsx_clinical_df['ieeg_subject'].tolist(), snsx_clinical_df['snsx_subject'].tolist()))
+
 #---- end snakebids boilerplate -----------------------------------------------
 # Add rules in order
-include: "rules/preproc_t1.smk"
-include: "rules/synthseg.smk"
-# include: "rules/fmriprep.smk"
-include: "rules/reg_t1_to_template.smk"
+# include: "rules/preproc_t1.smk"
+# include: "rules/synthseg.smk"
+# # include: "rules/fmriprep.smk"
+# include: "rules/reg_t1_to_template.smk"
 ## Epoch extraction rule
 if config['epoch'] or config['run_all'] or run_all:
     include: "rules/epoch_extraction.smk"
@@ -141,6 +135,7 @@ if config['PLI_rej'] or config['run_all'] or run_all:
 
 ## Region identification
 if config['regions_id'] or config['run_all'] or run_all:
+    include: "rules/transform.smk"
     include: "rules/identify_regions.smk"
 
 ## Merge tsv files
@@ -193,7 +188,7 @@ def define_all_inputs():
     # Else: default case run_all
     else:
         # print('hola')
-        return rules.epochs.output
+        return rules.identify_regions.output.out_edf, rules.merge_tsv.output.out_files[-1]
 
 rule all:
     input:

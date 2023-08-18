@@ -42,9 +42,9 @@ rule filter_data:
         # Other parameters
         # t1 = 'derivatives/freesurfer/sub-{subject}/mri/T1.mgz',
     params:
-        freesurf_dir = config['freesurf_dir'],
-        freesurf_patient = config['freesurf_patient_label'],
-        tf = get_tf,
+        # freesurf_dir = config['freesurf_dir'],
+        # freesurf_patient = config['freesurf_patient_label'],
+        # tf = get_tf,
         out_tsv = join(config['output_dir'],
                     bids(
                         root='bids',
