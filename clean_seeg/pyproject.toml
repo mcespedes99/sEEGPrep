@@ -1,0 +1,26 @@
+[tool.poetry]
+name = "clean_seeg"
+version = "0.1.0"
+description = "Preprocessing tool for eeg/seeg/ecog data"
+authors = ["Mauricio Cespedes Tenorio <mcespedes99@gmail.com>"]
+license = "Apache license 2.0"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = ">=3.10,<3.12"
+pyEDFlib = "^0.1.34"
+snakebids = "^0.7.2"
+pybids = "^0.15.6"
+numpy = "^1.24.2"
+pandas = "^2.0.0"
+scipy = "^1.10.1"
+nibabel = "^5.1"
+mne = "^1.5.0"
+matplotlib = "^3.7"
+SimpleITK = "^2.2.1"
+scikit-image = "^0.21"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
