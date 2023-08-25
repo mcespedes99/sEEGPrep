@@ -1,13 +1,15 @@
 from .utils import segment_signal
 
-def create_mne_epochs(signal, chn_labels, srate, montage, time_epoch=5):
+def create_mne_epochs(signal, chn_labels, srate, montage, time_epoch=5, chn_types=None):
     import numpy as np
     import mne
     # Divide the signal into small epochs
     signal_epoch, epochs_ids, n_missed = segment_signal(signal, srate, time_epoch)
     # Create information for MNE structure
+    if not chn_types:
+        ch_types = ['seeg'] * len(chn_labels)
     info = mne.create_info(ch_names=chn_labels,
-                        ch_types=['seeg'] * len(chn_labels),
+                        ch_types=ch_types,
                         sfreq=srate)
     # Create MNE epoch array 
     mne_epochs = mne.EpochsArray(signal_epoch, info)

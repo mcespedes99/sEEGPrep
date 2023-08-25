@@ -5,6 +5,22 @@ Author: Mauricio Cespedes Tenorio
 import numpy as np
 import pandas as pd
 import mne
+from .clean_drifts import clean_drifts
+
+
+# Function to remove trend
+def remove_trend(raw, method, srate, Transition):
+    import scipy.signal
+
+    if method == "HighPass":
+        detsignal = clean_drifts(raw, srate, Transition=Transition)
+    elif method == "LinearDetrend":
+        # linear detrending
+        detsignal = scipy.signal.detrend(raw, axis=-1)
+    elif method == "Demean":
+        raw_mean = np.mean(raw, axis=-1)
+        detsignal = np.subtract(raw, raw_mean.reshape((raw_mean.shape[0], -1)))
+    return detsignal
 
 
 def downsampling(chn, edf_file, orig_srate, target_srate):
