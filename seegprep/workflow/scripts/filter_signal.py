@@ -19,7 +19,7 @@ def main():
     processes = snakemake.config["processes"]
     out_edf = snakemake.output.out_edf
     out_tsv = snakemake.params.out_tsv
-    noncon_to_con_tf_path = snakemake.params.tf
+    noncon_to_con_tf_path = None  # snakemake.params.tf
     # subject = snakemake.params.freesurf_patient
     # subjects_dir = snakemake.params.freesurf_dir
     LOG_FILENAME = snakemake.log[0]

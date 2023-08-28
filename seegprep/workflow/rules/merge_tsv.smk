@@ -79,7 +79,7 @@ else: # Default to run_all
 # Rule to merge tsv files (there should be only for each initial edf file, not 1 for clip)
 rule merge_tsv:
     input:
-        tsv_files = lambda wc: expand(input_tsv(), zip,
+        in_files = lambda wc: expand(input_tsv(), zip,
                                 clip=[f'{number:02}' for number in range(1, number_clips[f'subj_{wc.subject}'][f'ses_{wc.session}']+1)], 
                                 allow_missing=True),
     group:
@@ -98,4 +98,4 @@ rule merge_tsv:
             suffix='merge.log',
             **inputs.wildcards['ieeg']
         )   
-    script: join(workflow.basedir,'scripts/merge_tsv.py')
+    script: join(workflow.basedir,'scripts/merge_files.py')

@@ -3,15 +3,22 @@ def get_7T(wildcards):
     if 'subject' in wc:
         # print(wc)
         del wc['subject']
-    t1_snsx = bids(
-            root=config['root_snsx'],
-            datatype="anat",
-            **wc,
-            suffix="T1w.nii.gz",
-            acq=config['acq_snsx'],
-            run='01',
-            subject=mapping_clinical_to_7T[f"P{wildcards.subject}"]
-            )
+    for path, acq in zip(config['root_snsx'], config['acq_snsx']):
+        t1_snsx = bids(
+                root=path,
+                datatype="anat",
+                **wc,
+                suffix="T1w.nii.gz",
+                acq=acq,
+                run='01',
+                subject=mapping_clinical_to_7T[f"P{wildcards.subject}"]
+                )
+        if os.path.exists(t1_snsx):
+            return t1_snsx
+        # Try without capital P
+        t1_snsx = t1_snsx.replace('sub-P', 'sub-p')
+        if os.path.exists(t1_snsx):
+            return t1_snsx
     return t1_snsx
     
 

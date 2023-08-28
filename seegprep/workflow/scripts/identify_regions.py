@@ -19,6 +19,7 @@ def main():
     processes = snakemake.config["processes"]
     out_edf = snakemake.output.out_edf
     out_tsv = snakemake.output.out_tsv
+    out_json = snakemake.output.out_json
     reref_run = snakemake.params.reref_run
     LOG_FILENAME = snakemake.log[0]
     logging.basicConfig(filename=LOG_FILENAME, level=logging.DEBUG)
@@ -50,6 +51,8 @@ def main():
             discard_wm_un=snakemake.config["discard_wm_un"],
             write_edf=True,
             out_edf_path=out_edf,
+            vol_version=True,
+            json_out=out_json,
         )
     except:
         logging.exception("Got exception on main handler")

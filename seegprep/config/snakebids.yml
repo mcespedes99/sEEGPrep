@@ -65,7 +65,8 @@ pybids_inputs:
       - acquisition
       - task
       - run
-    custom_path: '/home/mcesped/projects/ctb-akhanf/cfmm-bids/Khan/clinical_imaging/epi_iEEG/derivatives/seega_coordinates/sub-P{subject}/sub-P{subject}_space-native_SEEGA.tsv'
+    custom_path: /home/mcesped/projects/ctb-akhanf/cfmm-bids/Khan/clinical_imaging/epi_iEEG/derivatives/seega_coordinates/sub-P{subject}/sub-P{subject}_space-native_SEEGA.tsv
+    #/scratch/mcesped/Test/sub-P{subject}/sub-P{subject}_space-native_SEEGA.tsv # Only for sub-P004
 
   parc:
     filters:
@@ -89,7 +90,7 @@ pybids_inputs:
       - acquisition
       - task
       - run
-    custom_path: '/home/mcesped/projects/ctb-akhanf/cfmm-bids/Khan/clinical_imaging/epi_iEEG/derivatives/atlasreg/sub-P{subject}/sub-P{subject}_desc-rigid_from-noncontrast_to-contrast_type-ras_xfm.txt'
+    custom_path: /home/mcesped/projects/ctb-akhanf/cfmm-bids/Khan/clinical_imaging/epi_iEEG/derivatives/atlasreg/sub-P{subject}/sub-P{subject}_desc-rigid_from-noncontrast_to-contrast_type-ras_xfm.txt
     # custom_path: '/home/mcesped/projects/ctb-akhanf/cfmm-bids/Khan/clinical_imaging/epi_iEEG/old_bids/derivatives/atlasreg/sub-P{subject}/sub-P{subject}_acq-noncontrast_desc-rigid_from-noncontrast_to-contrast_type-ras_xfm.txt'
 
   T1w:
@@ -102,7 +103,7 @@ pybids_inputs:
       - acquisition
       - task
       - run
-    custom_path: '/project/ctb-akhanf/cfmm-bids/Khan/clinical_imaging/epi_iEEG/derivatives/atlasreg/sub-P{subject}/sub-P{subject}_T1w.nii.gz'
+    custom_path: /project/ctb-akhanf/cfmm-bids/Khan/clinical_imaging/epi_iEEG/derivatives/atlasreg/sub-P{subject}/sub-P{subject}_T1w.nii.gz
 
 freesurf_dir: None #'/home/mcesped/projects/ctb-akhanf/cfmm-bids/Khan/clinical_imaging/epi_iEEG/old_bids/derivatives/fastsurfer/'
 freesurf_patient_label: None #'sub-P{subject}'
@@ -177,9 +178,12 @@ t1_to_coords_tfm: False
 # Data resources
 colortable: resources/colortables/desc-subfields_atlas-bigbrain_dseg.tsv
 clinical_snsx: resources/mapping_snsx_clinical.tsv
-root_snsx: /project/ctb-akhanf/cfmm-bids/Khan/SNSX_7T_2021/correct7T.dev/gradcorrect_v0.0.3 #/project/ctb-akhanf/cfmm-bids/Khan/SNSX_7T/tar2bids_v0.0.5e/correct7T.v0.3/gradcorrect_v0.0.3
-acq_snsx: MP2RAGEpostproc #MP2RAGE
-seg_path: /scratch/mcesped/Results/batch-hippunfold/hippunfold/sub-{subject}/anat/sub-{subject}_hemi-R_space-cropT1w_desc-subfields_atlas-bigbrain_dseg.nii.gz
+root_snsx: ['/project/ctb-akhanf/cfmm-bids/Khan/SNSX_7T_2021/correct7T.dev/gradcorrect_v0.0.3',
+'/project/ctb-akhanf/cfmm-bids/Khan/SNSX_7T/tar2bids_v0.0.5e/correct7T.v0.3/gradcorrect_v0.0.3']
+acq_snsx: ['MP2RAGEpostproc', 'MP2RAGE']
+seg_path: ['/project/ctb-akhanf/myousif9/snsx/output/snsx_hippunfold_12152022/hippunfold/sub-{subject}/anat/sub-{subject}_hemi-L_space-T1w_desc-subfields_atlas-bigbrain_dseg.nii.gz',
+'/project/ctb-akhanf/myousif9/snsx/output/snsx_hippunfold_12152022/hippunfold/sub-{subject}/anat/sub-{subject}_hemi-R_space-T1w_desc-subfields_atlas-bigbrain_dseg.nii.gz']
+#/scratch/mcesped/Results/batch-hippunfold/hippunfold/sub-{subject}/anat/sub-{subject}_hemi-R_space-cropT1w_desc-subfields_atlas-bigbrain_dseg.nii.gz
 
 
 #-------------------------------BIDS APP Configuration---------------------------

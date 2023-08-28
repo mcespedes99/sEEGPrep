@@ -4,9 +4,9 @@ from .utils import (
     get_orig_data,
     get_chn_positions,
     downsampling,
+    remove_trend,
 )
 from .clean_autoreject import create_mne_epochs, run_autoreject
-from .clean_drifts import clean_drifts
 from .clean_flatlines import clean_flatlines
 from .clean_PLI import removePLI_chns, zapline, cleanline, notch_filt
 from .data_manager import (
@@ -200,7 +200,7 @@ class cleanSEEG:
         write_edf=False,
         out_edf_path=None,
         vol_version=False,
-        json_out = None
+        json_out=None,
     ):
         import os
         import pyedflib
@@ -433,21 +433,6 @@ class cleanSEEG:
         signal = signal.T
         return signal
 
-    # Function to remove trend
-    def remove_trend(self, raw):
-        import scipy.signal
-        import numpy as np
-
-        if self.RmTrendMethod == "HighPass":
-            detsignal = clean_drifts(raw, self.srate, Transition=self.highpass)
-        elif self.RmTrendMethod == "LinearDetrend":
-            # linear detrending
-            detsignal = scipy.signal.detrend(raw, axis=-1)
-        elif self.RmTrendMethod == "Demean":
-            raw_mean = np.mean(raw, axis=-1)
-            detsignal = np.subtract(raw, raw_mean.reshape((raw_mean.shape[0], -1)))
-        return detsignal
-
     def clean_epochs(
         self,
         subject=None,
@@ -518,6 +503,8 @@ class cleanSEEG:
                 chn_sig = edf_in.readSignal(id_ch)
                 signal.append(chn_sig)
             edf_in.close()
+            if len(signal) == 0:
+                raise Exception("No channels match between EDF and tsv files.")
             # Convert signal to array
             signal = np.vstack(signal)
             # Run cleaning
@@ -610,7 +597,7 @@ class cleanSEEG:
         # Remove drifts (highpass data) if required
         if self.highpass != None:
             print("Removing trend")
-            raw = self.remove_trend(raw)
+            raw = remove_trend(raw, self.RmTrendMethod, self.srate, self.highpass)
             # raw = clean_drifts(raw,self.srate,Transition=self.highpass)
         print(raw.shape)
         # Remove flat-line channels

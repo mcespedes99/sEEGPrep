@@ -29,14 +29,11 @@ def region_id_inputs():
         #print('reref before regionsID (run all)')
         return rules.PLI_reject.output.out_edf, rules.rereference.output.out_tsv
 
-def get_segmentation(wildcards):
-    return expand(config['seg_path'], subject=mapping_clinical_to_7T[f"P{wildcards.subject}"])
-
 # Rule
 rule identify_regions:
     input:
         edf_tsv = region_id_inputs(),
-        parc = get_segmentation,
+        parc = rules.merge_labels.output.out_seg,
         tfm = rules.transform_7T_to_clinical.output.tfm, # need to create new rule to go from 7T to 1.5T
     params:
         colortable = os.path.join(workflow.basedir, "..", config['colortable']),
@@ -55,6 +52,13 @@ rule identify_regions:
                         root='bids',
                         datatype='ieeg',
                         suffix='regions_native_space.tsv',
+                        rec='regionID',
+                        **out_edf_wc
+                ),
+        out_json = bids(
+                        root='bids',
+                        datatype='ieeg',
+                        suffix='regions_native_space.json',
                         rec='regionID',
                         **out_edf_wc
                 ),
