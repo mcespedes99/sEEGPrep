@@ -7,9 +7,9 @@ def create_mne_epochs(signal, chn_labels, srate, montage, time_epoch=5, chn_type
     signal_epoch, epochs_ids, n_missed = segment_signal(signal, srate, time_epoch)
     # Create information for MNE structure
     if not chn_types:
-        ch_types = ['seeg'] * len(chn_labels)
+        chn_types = ['seeg'] * len(chn_labels)
     info = mne.create_info(ch_names=chn_labels,
-                        ch_types=ch_types,
+                        ch_types=chn_types,
                         sfreq=srate)
     # Create MNE epoch array 
     mne_epochs = mne.EpochsArray(signal_epoch, info)
