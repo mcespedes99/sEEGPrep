@@ -179,12 +179,19 @@ t1_to_coords_tfm: False
 colortable: resources/colortables/desc-subfields_atlas-bigbrain_dseg.tsv
 clinical_snsx: resources/mapping_snsx_clinical.tsv
 root_snsx: ['/project/ctb-akhanf/cfmm-bids/Khan/SNSX_7T_2021/correct7T.dev/gradcorrect_v0.0.3',
+'/project/ctb-akhanf/cfmm-bids/Khan/SNSX_7T/tar2bids_v0.0.5e/correct7T.v0.3/gradcorrect_v0.0.3',
 '/project/ctb-akhanf/cfmm-bids/Khan/SNSX_7T/tar2bids_v0.0.5e/correct7T.v0.3/gradcorrect_v0.0.3']
-acq_snsx: ['MP2RAGEpostproc', 'MP2RAGE']
-seg_path: ['/project/ctb-akhanf/myousif9/snsx/output/snsx_hippunfold_12152022/hippunfold/sub-{subject}/anat/sub-{subject}_hemi-L_space-T1w_desc-subfields_atlas-bigbrain_dseg.nii.gz',
-'/project/ctb-akhanf/myousif9/snsx/output/snsx_hippunfold_12152022/hippunfold/sub-{subject}/anat/sub-{subject}_hemi-R_space-T1w_desc-subfields_atlas-bigbrain_dseg.nii.gz']
-#/scratch/mcesped/Results/batch-hippunfold/hippunfold/sub-{subject}/anat/sub-{subject}_hemi-R_space-cropT1w_desc-subfields_atlas-bigbrain_dseg.nii.gz
-
+acq_snsx: ['MP2RAGEpostproc', 'MP2RAGE', 'MEMP2RAGE']
+seg_path: ['/scratch/mcesped/Results/hippunfold/batch-hippunfold/hippunfold/sub-{subject}/anat/sub-{subject}_hemi-L_space-cropT1w_desc-subfields_atlas-bigbrain_dseg.nii.gz',
+'/scratch/mcesped/Results/hippunfold/batch-hippunfold/hippunfold/sub-{subject}/anat/sub-{subject}_hemi-R_space-cropT1w_desc-subfields_atlas-bigbrain_dseg.nii.gz']
+# seg_path: ['/project/ctb-akhanf/myousif9/snsx/output/snsx_hippunfold_12152022/hippunfold/sub-{subject}/anat/sub-{subject}_hemi-L_space-cropT1w_desc-subfields_atlas-bigbrain_dseg.nii.gz',
+# '/project/ctb-akha  nf/myousif9/snsx/output/snsx_hippunfold_12152022/hippunfold/sub-{subject}/anat/sub-{subject}_hemi-R_space-cropT1w_desc-subfields_atlas-bigbrain_dseg.nii.gz']
+inner_path: ['/scratch/mcesped/Results/hippunfold/batch-hippunfold/hippunfold/sub-{subject}/surf/sub-{subject}_hemi-L_space-T1w_den-0p5mm_label-hipp_inner.surf.gii',
+'/scratch/mcesped/Results/hippunfold/batch-hippunfold/hippunfold/sub-{subject}/surf/sub-{subject}_hemi-R_space-T1w_den-0p5mm_label-hipp_inner.surf.gii']
+midthickness_path: ['/scratch/mcesped/Results/hippunfold/batch-hippunfold/hippunfold/sub-{subject}/surf/sub-{subject}_hemi-L_space-T1w_den-0p5mm_label-hipp_midthickness.surf.gii',
+'/scratch/mcesped/Results/hippunfold/batch-hippunfold/hippunfold/sub-{subject}/surf/sub-{subject}_hemi-R_space-T1w_den-0p5mm_label-hipp_midthickness.surf.gii']
+outer_path: ['/scratch/mcesped/Results/hippunfold/batch-hippunfold/hippunfold/sub-{subject}/surf/sub-{subject}_hemi-L_space-T1w_den-0p5mm_label-hipp_outer.surf.gii',
+'/scratch/mcesped/Results/hippunfold/batch-hippunfold/hippunfold/sub-{subject}/surf/sub-{subject}_hemi-R_space-T1w_den-0p5mm_label-hipp_outer.surf.gii']
 
 #-------------------------------BIDS APP Configuration---------------------------
 #this configures the options to save the BIDSLayout
@@ -299,6 +306,8 @@ singularity:
     graham:
       diffparc: '/project/ctb-akhanf/akhanf/singularity/bids-apps/khanlab_diffparc-deps_v0.1.0-fix.sif'
       fmriprep: '/project/6050199/akhanf/singularity/bids-apps/poldracklab_fmriprep_20.1.1.sif' 
+      autotop: '/scratch/mcesped/containers/autotop_deps_v0.4.3.sif'
     docker:
       diffparc: 'docker://khanlab/diffparc-deps:v0.1.0-fix'
       fmriprep: docker://nipreps/fmriprep:22.0.1'
+      autotop: docker://khanlab/autotop_deps:v0.4.3

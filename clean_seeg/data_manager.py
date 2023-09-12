@@ -18,6 +18,7 @@ import sys
 import SimpleITK as sitk
 from skimage.morphology import dilation
 from skimage.morphology import ball
+from pathlib import Path
 
 
 # Function to create bipolar channels from given unipolars
@@ -325,122 +326,79 @@ def create_line_mask(point1, point2, shape):
 
 
 # Function to get electrode region based on volume mask
-def mask_and_get_region(parc, elec_df, df_cols, tfm_list, label_map):
-    # Load data of parcellations
-    data_parc = np.asarray(parc.dataobj)
-    # Coordinates in MRI RAS
-    mri_ras_mm_init = elec_df[
-        [df_cols["x_init"], df_cols["y_init"], df_cols["z_init"]]
-    ].values
-    mri_ras_mm_end = elec_df[
-        [df_cols["x_end"], df_cols["y_end"], df_cols["z_end"]]
-    ].values
+def get_regions_from_mask(
+    parc_objs, elec_df, df_cols, label_map, colormask_df, masks_list
+):
     # Get channel names to build json file
     chn_names = elec_df[df_cols["label"]].values
-    # print(mri_ras_mm)
-    # Apply transforms
-    for tfm, inv_bool in tfm_list:
-        if type(tfm) == str:
-            if tfm.endswith("txt"):
-                tfm = readRegMatrix(tfm)
-                if inv_bool:
-                    tfm = np.linalg.inv(tfm)
-                mri_ras_mm_init = mne.transforms.apply_trans(tfm, mri_ras_mm_init)
-                mri_ras_mm_end = mne.transforms.apply_trans(tfm, mri_ras_mm_end)
-            elif tfm.endswith("nii.gz"):
-                # reads the transform and casts the output compaitble format
-                transform_image = sitk.ReadImage(tfm)
-                transform_image = sitk.Cast(transform_image, sitk.sitkVectorFloat64)
-                # load it as a transform
-                identity_transform = sitk.Transform(transform_image)
-                # Convert points from RAS to LPS
-                mri_mni_lps_init = mri_ras_mm_init * np.array([-1, -1, 1])
-                mri_mni_lps_end = mri_ras_mm_end * np.array([-1, -1, 1])
-                # Transform
-                for point_id in range(mri_mni_lps_init.shape[0]):
-                    mri_mni_lps_init[point_id, :] = np.array(
-                        identity_transform.TransformPoint(mri_mni_lps_init[point_id, :])
-                    )
-                    mri_mni_lps_end[point_id, :] = np.array(
-                        identity_transform.TransformPoint(mri_mni_lps_end[point_id, :])
-                    )
-                # Convert from LPS back to RAS
-                mri_ras_mm_init = mri_mni_lps_init * np.array([-1, -1, 1])
-                mri_ras_mm_end = mri_mni_lps_end * np.array([-1, -1, 1])
-
-        else:
-            if inv_bool:
-                tfm = np.linalg.inv(tfm)
-            mri_ras_mm_init = mne.transforms.apply_trans(tfm, mri_ras_mm_init)
-            mri_ras_mm_end = mne.transforms.apply_trans(tfm, mri_ras_mm_end)
-    # To voxels
-    inv_affine = np.linalg.inv(parc.affine)
-    # here's where the interpolation should be performed!!
-    vox_init = np.round(
-        (mne.transforms.apply_trans(inv_affine, mri_ras_mm_init))
-    ).astype(int)
-    vox_end = np.round((mne.transforms.apply_trans(inv_affine, mri_ras_mm_end))).astype(
-        int
-    )
-    # print(vox)
-    # Try to get all the indexes
     # For hippunfold, the space is cropped, so it might be the case that one of the contacts is outside of the cropped space.
     # Assign unknown in this case.
     id = []
     regions_per_chn = dict()
-    for idx in range(vox_init.shape[0]):
-        # If outside of the cropped space:
-        if (
-            (vox_init[idx, 0] >= data_parc.shape[0])
-            or (vox_init[idx, 1] >= data_parc.shape[1])
-            or (vox_init[idx, 2] >= data_parc.shape[2])
-            or (vox_init[idx, :] < 0).any()
-            or (vox_end[idx, 0] >= data_parc.shape[0])
-            or (vox_end[idx, 1] >= data_parc.shape[1])
-            or (vox_end[idx, 2] >= data_parc.shape[2])
-            or (vox_end[idx, :] < 0).any()
-        ):
+    print(colormask_df.head())
+    for chn in chn_names:
+        if len(colormask_df["channel"].tolist()) > 0:
+            # Get information from colortable of masks
+            bool_chn = colormask_df["channel"].str.match(f"{chn}", case=False)
+            bool_chn2 = colormask_df["channel"].str.contains(
+                f"_{chn}", case=False, regex=True
+            )
+            scalars_chn = colormask_df["scalar"][bool_chn + bool_chn2].to_numpy()
+            files_chn = colormask_df["parc_id"][bool_chn + bool_chn2].to_numpy()
+            if chn == "RHc1-2":
+                print(scalars_chn)
+                print(files_chn)
+            # If outside of the cropped space:
+            if len(scalars_chn) == 0:
+                id.append(0)
+                # Update dict
+                regions_per_chn[chn] = {"Unknown": 1}
+            else:
+                freq_labels = []
+                for parc_id in np.unique(files_chn):
+                    # Get parc object, mask, scalar associated
+                    data_parc = np.asarray(parc_objs[int(parc_id)].dataobj)
+                    scalars = scalars_chn[files_chn == parc_id]
+                    mask = masks_list[int(parc_id)]
+                    # Calculate based on volume
+                    mask_chn = np.zeros(mask.shape).astype(bool)
+                    for scalar in scalars:
+                        mask_chn += mask == scalar
+                    # Get masked data
+                    regions_chn = data_parc[mask_chn]
+                    if chn == "RHc1-2":
+                        print(np.unique(regions_chn))
+                    # Get frequency of each region for this channel
+                    for label in np.unique(regions_chn):
+                        freq_labels.append(
+                            (
+                                label,
+                                np.round(
+                                    len(regions_chn[regions_chn == label])
+                                    / len(regions_chn),
+                                    2,
+                                ),
+                            )
+                        )
+                # Sort it and choose first
+                freq_labels = sorted(freq_labels, key=lambda x: x[1], reverse=True)
+                id.append(int(freq_labels[0][0]))
+                # Save into dict
+                tmp_dict = dict()
+                for label_idx, freq in freq_labels:
+                    tmp_dict[label_map.loc[label_idx, "name"]] = freq
+                regions_per_chn[chn] = tmp_dict
+        else:
             id.append(0)
             # Update dict
-            regions_per_chn[chn_names[idx]] = {"Unknown": 1}
-        else:
-            # Calculate based on volume
-            # Create mask
-            mask = create_line_mask(
-                vox_init[idx, :].tolist(), vox_end[idx, :].tolist(), data_parc.shape
-            )
-            # Dilate mask
-            dilated = dilation(mask, ball(1))
-            # Get masked data
-            regions_chn = data_parc[dilated]
-            # Get frequency of each region for this channel
-            freq_labels = []
-            for label in np.unique(regions_chn):
-                freq_labels.append(
-                    (
-                        label,
-                        np.round(
-                            len(regions_chn[regions_chn == label]) / len(regions_chn), 2
-                        ),
-                    )
-                )
-            # Sort it and choose first
-            freq_labels = sorted(freq_labels, key=lambda x: x[1], reverse=True)
-            id.append(int(freq_labels[0][0]))
-            # Save into dict
-            tmp_dict = dict()
-            for label_idx, freq in freq_labels:
-                tmp_dict[label_map.loc[label_idx, "name"]] = freq
-            regions_per_chn[chn_names[idx]] = tmp_dict
+            regions_per_chn[chn] = {"Unknown": 1}
     id = np.array(id)
     return id, regions_per_chn
 
 
 # Function to get label id based on parcellation obj
 # TODO: test function in jupyter notebook
-def get_electrodes_id(parc, elec_df, df_cols, tfm_list):
-    # Load data of parcellations
-    data_parc = np.asarray(parc.dataobj)
+def get_electrodes_id(parc_objs, elec_df, df_cols, tfm_list):
     # Coordinates in MRI RAS
     mri_ras_mm = elec_df[[df_cols["x"], df_cols["y"], df_cols["z"]]].values
     # print(mri_ras_mm)
@@ -478,46 +436,80 @@ def get_electrodes_id(parc, elec_df, df_cols, tfm_list):
     elec_df[df_cols["y"]] = mri_ras_mm[:, 1]
     elec_df[df_cols["z"]] = mri_ras_mm[:, 2]
     # print(mri_ras_mm)
-    # To voxels
-    inv_affine = np.linalg.inv(parc.affine)
-    # here's where the interpolation should be performed!!
-    vox = np.round((mne.transforms.apply_trans(inv_affine, mri_ras_mm))).astype(int)
+    parc_vox = []
+    for parc in parc_objs:
+        # Load data of parcellations
+        data_parc = np.asarray(parc.dataobj)
+        # To voxels
+        inv_affine = np.linalg.inv(parc.affine)
+        # here's where the interpolation should be performed!!
+        vox = np.round((mne.transforms.apply_trans(inv_affine, mri_ras_mm))).astype(int)
+        parc_vox.append(data_parc, vox)
     # print(vox)
     # Try to get all the indexes
     # For hippunfold, the space is cropped, so it might be the case that one of the vox values is outside of the cropped space.
     # Assign unknown in this case.
-    if (
-        (vox[:, 0] >= data_parc.shape[0]).any()
-        or (vox[:, 1] >= data_parc.shape[1]).any()
-        or (vox[:, 2] >= data_parc.shape[2]).any()
-        or (vox < 0).any()  # If any of the elements is pointing to a 'negative index'
-    ):
-        id = []
-        for idx in range(vox.shape[0]):
-            # If outside of the cropped space:
-            if (
+    # First case: all voxels inside a parcellation obj
+    for data_parc, vox in parc_vox:
+        if not (
+            (vox[:, 0] >= data_parc.shape[0]).any()
+            or (vox[:, 1] >= data_parc.shape[1]).any()
+            or (vox[:, 2] >= data_parc.shape[2]).any()
+            or (
+                vox < 0
+            ).any()  # If any of the elements is pointing to a 'negative index'
+        ):
+            id = data_parc[vox[:, 0], vox[:, 1], vox[:, 2]]
+            return id, elec_df
+    # Case 2: sparse across parcellation
+    id = []
+    for idx in range(vox.shape[0]):
+        val = -1
+        # For each parcellation
+        i = 0
+        while (val == -1 or val == 0) and i < len(parc_vox):
+            data_parc, vox = parc_vox[i]
+            # If inside the cropped space:
+            if not (
                 (vox[idx, 0] >= data_parc.shape[0])
                 or (vox[idx, 1] >= data_parc.shape[1])
                 or (vox[idx, 2] >= data_parc.shape[2])
                 or (vox[idx, :] < 0).any()
             ):
-                id.append(0)
-            else:
-                id.append(data_parc[vox[idx, 0], vox[idx, 1], vox[idx, 2]])
-        id = np.array(id)
-    # Get the indexes more efficiently
-    else:
-        id = data_parc[vox[:, 0], vox[:, 1], vox[:, 2]]
+                val = data_parc[vox[idx, 0], vox[idx, 1], vox[idx, 2]]
+            i += 1
+        # If outside all parcellations
+        if val == -1:
+            val = 0
+        id.append(val)
+    id = np.array(id)
     return id, elec_df
 
 
+# Function to read matrix
+def readRegMatrix(trsfPath):
+    with open(trsfPath) as (f):
+        return np.loadtxt(f.readlines())
+
+
 # Function to get rgb values for each contact
-def get_label_rgb(parc, elec_df, tfm_list, label_map, df_cols, vol_version):
+def get_label_rgb(
+    parc_objs,
+    elec_df,
+    tfm_list,
+    label_map,
+    df_cols,
+    vol_version,
+    colormask_df=None,
+    masks_list=None,
+):
     if vol_version:
-        id, regions_per_chn = mask_and_get_region(parc, elec_df, df_cols, tfm_list, label_map)
+        id, regions_per_chn = get_regions_from_mask(
+            parc_objs, elec_df, df_cols, label_map, colormask_df, masks_list
+        )
     else:
         # vox, data_parc = ras2vox(parc, elec_df, non_cont_to_cont_tf)
-        id, elec_df = get_electrodes_id(parc, elec_df, df_cols, tfm_list)
+        id, elec_df = get_electrodes_id(parc_objs, elec_df, df_cols, tfm_list)
         regions_per_chn = None
     print(label_map)
     print(id)
@@ -529,27 +521,201 @@ def get_label_rgb(parc, elec_df, tfm_list, label_map, df_cols, vol_version):
     return vals, regions_per_chn
 
 
-# Function to read matrix
-def readRegMatrix(trsfPath):
-    with open(trsfPath) as (f):
-        return np.loadtxt(f.readlines())
-
-
 # Function to create tsv with bipolar channels info
 def extract_location(
-    parc_path, chn_info_df, df_cols, tfm_list, colortable_file, vol_version=False
+    parc_list,
+    chn_info_df,
+    df_cols,
+    tfm_list,
+    colortable_file,
+    vol_version=False,
+    colormask_df=None,
+    masks_list=None,
 ):
     import os
 
     # Load labels from LUT file
     labels = get_colors_labels(colortable_file)
     # Load parcellation file
-    parc_obj = nb.load(parc_path)
+    parc_objs = [nb.load(parc_path) for parc_path in parc_list]
     # Create df
-    df, regions_per_chn = get_label_rgb(parc_obj, chn_info_df, tfm_list, labels, df_cols, vol_version)
+    df, regions_per_chn = get_label_rgb(
+        parc_objs,
+        chn_info_df,
+        tfm_list,
+        labels,
+        df_cols,
+        vol_version,
+        colormask_df,
+        masks_list,
+    )
     # if not os.path.exists(out_tsv_name):
     #     df.to_csv(out_tsv_name, sep = '\t')
     return df, regions_per_chn
+
+
+# Function to get mask with bipolar channels
+def get_mask(parc_list, elec_df, df_cols, tfm_list, masks_out, colortable_out):
+    # Coordinates in MRI RAS
+    mri_ras_mm_init = elec_df[
+        [df_cols["x_init"], df_cols["y_init"], df_cols["z_init"]]
+    ].values
+    mri_ras_mm_end = elec_df[
+        [df_cols["x_end"], df_cols["y_end"], df_cols["z_end"]]
+    ].values
+    # Apply transforms
+    for tfm, inv_bool in tfm_list:
+        if type(tfm) == str:
+            if tfm.endswith("txt"):
+                tfm = readRegMatrix(tfm)
+                if inv_bool:
+                    tfm = np.linalg.inv(tfm)
+                mri_ras_mm_init = mne.transforms.apply_trans(tfm, mri_ras_mm_init)
+                mri_ras_mm_end = mne.transforms.apply_trans(tfm, mri_ras_mm_end)
+            elif tfm.endswith("nii.gz"):
+                # reads the transform and casts the output compaitble format
+                transform_image = sitk.ReadImage(tfm)
+                transform_image = sitk.Cast(transform_image, sitk.sitkVectorFloat64)
+                # load it as a transform
+                identity_transform = sitk.Transform(transform_image)
+                # Convert points from RAS to LPS
+                mri_mni_lps_init = mri_ras_mm_init * np.array([-1, -1, 1])
+                mri_mni_lps_end = mri_ras_mm_end * np.array([-1, -1, 1])
+                # Transform
+                for point_id in range(mri_mni_lps_init.shape[0]):
+                    mri_mni_lps_init[point_id, :] = np.array(
+                        identity_transform.TransformPoint(mri_mni_lps_init[point_id, :])
+                    )
+                    mri_mni_lps_end[point_id, :] = np.array(
+                        identity_transform.TransformPoint(mri_mni_lps_end[point_id, :])
+                    )
+                # Convert from LPS back to RAS
+                mri_ras_mm_init = mri_mni_lps_init * np.array([-1, -1, 1])
+                mri_ras_mm_end = mri_mni_lps_end * np.array([-1, -1, 1])
+
+        else:
+            if inv_bool:
+                tfm = np.linalg.inv(tfm)
+            mri_ras_mm_init = mne.transforms.apply_trans(tfm, mri_ras_mm_init)
+            mri_ras_mm_end = mne.transforms.apply_trans(tfm, mri_ras_mm_end)
+    # Get labels of channels to build color table
+    labels_chns = elec_df[df_cols["label"]].to_list()
+    # Get mask per parcellation
+    colortable_dict = {"scalar": [], "channel": [], "parc_id": []}
+    scalar_val = 1
+    masks_list = []
+    # Check that mask_out has the same length as parc_list
+    assert len(masks_out) == len(parc_list)
+    parc_id = 0
+    for parc_path, mask_out in zip(parc_list, masks_out):
+        # Information to write masks
+        filename = Path(mask_out)
+        suffixes = "".join(filename.suffixes)
+        filename_no_suffix = mask_out.replace(suffixes, "")
+        # Load parc file
+        parc = nb.load(parc_path)
+        # Load data of parcellations
+        data_parc = np.asarray(parc.dataobj)
+        # To voxels
+        inv_affine = np.linalg.inv(parc.affine)
+        # here's where the interpolation should be performed!!
+        vox_init = np.round(
+            (mne.transforms.apply_trans(inv_affine, mri_ras_mm_init))
+        ).astype(int)
+        vox_end = np.round(
+            (mne.transforms.apply_trans(inv_affine, mri_ras_mm_end))
+        ).astype(int)
+        # Get mask and color table
+        final_mask = np.zeros(data_parc.shape).astype(int)
+        for idx in range(vox_init.shape[0]):
+            # If outside of the cropped space:
+            if not (
+                (vox_init[idx, 0] >= data_parc.shape[0])
+                or (vox_init[idx, 1] >= data_parc.shape[1])
+                or (vox_init[idx, 2] >= data_parc.shape[2])
+                or (vox_init[idx, :] < 0).any()
+                or (vox_end[idx, 0] >= data_parc.shape[0])
+                or (vox_end[idx, 1] >= data_parc.shape[1])
+                or (vox_end[idx, 2] >= data_parc.shape[2])
+                or (vox_end[idx, :] < 0).any()
+            ):
+                # Calculate based on volume
+                # Create mask
+                mask = create_line_mask(
+                    vox_init[idx, :].tolist(), vox_end[idx, :].tolist(), data_parc.shape
+                )
+                # Dilate mask
+                dilated = dilation(mask, ball(1))
+                # Include spheres
+                radious = 4
+                footprint = ball(radious)
+                idx_in = int(np.floor(len(footprint) / 2))
+                idx_end = int(np.ceil(len(footprint) / 2))
+                for point in [vox_init[idx, :].tolist(), vox_end[idx, :].tolist()]:
+                    id_dilated = []
+                    id_ball = []
+                    for i in range(len(point)):
+                        in_dilated = max(point[i] - idx_in, 0)
+                        in_ball = radious - (point[i] - in_dilated)
+                        end_dilated = min(point[i] + idx_end, dilated.shape[i])
+                        end_ball = radious + (end_dilated - point[i])
+                        id_dilated.append((in_dilated, end_dilated))
+                        id_ball.append((in_ball, end_ball))
+                    dilated[
+                        id_dilated[0][0] : id_dilated[0][1],
+                        id_dilated[1][0] : id_dilated[1][1],
+                        id_dilated[2][0] : id_dilated[2][1],
+                    ] += footprint.astype(bool)[
+                        id_ball[0][0] : id_ball[0][1],
+                        id_ball[1][0] : id_ball[1][1],
+                        id_ball[2][0] : id_ball[2][1],
+                    ]
+                # Update mask if contains useful info
+                if (data_parc[dilated] != 0).any():
+                    # Save electrode mask
+                    chn_img = nb.Nifti1Image(dilated, parc.affine, parc.header)
+                    chn_img_name = (
+                        filename_no_suffix + f"_chn-{labels_chns[idx]}" + suffixes
+                    )
+                    nb.save(chn_img, chn_img_name)
+                    # Update the whole mask
+                    old_mask = np.copy(final_mask)
+                    final_mask[dilated] += scalar_val
+                    # Update colortable
+                    colortable_dict["scalar"].append(scalar_val)
+                    colortable_dict["channel"].append(labels_chns[idx])
+                    colortable_dict["parc_id"].append(parc_id)
+                    # Update in case of intersection
+                    if (final_mask > scalar_val).any():
+                        update_ids = final_mask > scalar_val
+                        old_ids = np.unique(old_mask[update_ids])
+                        for id_chn in old_ids:
+                            scalar_val += 1
+                            colortable_dict["scalar"].append(scalar_val)
+                            old_label = colortable_dict["channel"][
+                                colortable_dict["scalar"].index(id_chn)
+                            ]
+                            colortable_dict["channel"].append(
+                                old_label + "_" + labels_chns[idx]
+                            )
+                            colortable_dict["parc_id"].append(parc_id)
+                            # Update scalars in mask
+                            final_mask[(old_mask == id_chn) * update_ids] = scalar_val
+                    scalar_val += 1
+                    print("b")
+                    print(np.unique(final_mask))
+        # Write mask out
+        masked_img = nb.Nifti1Image(final_mask, parc.affine, parc.header)
+        nb.save(masked_img, mask_out)
+        # Save mask to list
+        masks_list.append(final_mask)
+        # Update parc id
+        parc_id += 1
+    # Convert to colortable to df
+    colortable_df = pd.DataFrame(colortable_dict)
+    # Save to tsv
+    colortable_df.to_csv(colortable_out, sep="\t", index=False)
+    return colortable_df, masks_list
 
 
 # Function to extract useful information from csv file

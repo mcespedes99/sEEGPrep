@@ -16,6 +16,7 @@ from .data_manager import (
     apply_bipolar_criteria,
     get_chn_info,
     create_epoch_EDF,
+    get_mask
 )
 import logging
 
@@ -189,7 +190,7 @@ class cleanSEEG:
 
     def identify_regions(
         self,
-        aparc_aseg_path,
+        parc_list,
         colortable_file,  # colortable has to be a tsv with at least index, name
         use_reref=True,
         write_tsv=False,
@@ -200,6 +201,8 @@ class cleanSEEG:
         write_edf=False,
         out_edf_path=None,
         vol_version=False,
+        masks_out=None, 
+        colormask_out=None,
         json_out=None,
     ):
         import os
@@ -249,14 +252,21 @@ class cleanSEEG:
                 self.chn_csv_path, elec_edf, df_cols=df_cols, vol_version=vol_version
             )  # , conf=conf
         # TODO: verify format of df_cols based on "vol_version"
+        if vol_version:
+            assert masks_out, colormask_out
+            colormask_df, masks_list = get_mask(parc_list, chn_info_df, df_cols, self.tfm, masks_out, colormask_out)
+        else:
+            colormask_df, masks_list = [None, None]
         # Create tsv file with information about location of the channels
         df_location, regions_per_chn = extract_location(
-            aparc_aseg_path,
+            parc_list,
             chn_info_df,
             df_cols,
             self.tfm,
             colortable_file,
             vol_version,
+            colormask_df,
+            masks_list
         )
         if write_tsv:
             if os.path.exists(out_tsv_path):

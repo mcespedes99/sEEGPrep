@@ -7,6 +7,7 @@ import pandas as pd
 import numpy as np
 import copy
 import os
+from functools import partial
 
 configfile: workflow.source_path('../config/snakebids.yml')
 
@@ -136,7 +137,7 @@ if config['PLI_rej'] or config['run_all'] or run_all:
 ## Region identification
 if config['regions_id'] or config['run_all'] or run_all:
     include: "rules/transform.smk"
-    include: "rules/merge_labels.smk"
+    # include: "rules/merge_labels.smk"
     include: "rules/identify_regions.smk"
 
 ## Merge tsv files
@@ -144,8 +145,10 @@ if config['regions_id'] or config['rereference'] or config['run_all'] or run_all
     include: "rules/merge_tsv.smk"
 
 # Merge json files
+# This is here bc if I put it up, it's gonna complain that it doesnt have the merge_tsv rules.
 if config['regions_id'] or config['run_all'] or run_all:
-    include: "rules/merge_json.smk"
+    include: "rules/merge_files.smk"
+    include: "rules/unfold_masks.smk"
 
 # print(config['processes'])
 
@@ -157,7 +160,8 @@ def define_all_inputs():
     # If regions_id is the last step
     if config['run_all'] or config['regions_id']:
         # Only use last output of the rules.merge_tsv.output.out_files, which is the one under bids
-        return rules.identify_regions.output.out_edf, rules.merge_tsv.output.out_files[-1], rules.merge_json.output.out_files
+        return rules.identify_regions.output.out_edf, rules.merge_tsv.output.out_files[-1], rules.merge_files.output.out_json, \
+        rules.unfold_masks.output.out_masks[0], rules.unfold_masks.output.out_masks[1], rules.merge_files.output.out_colormask
     # Power line rejection is the last step and rereference is called
     elif config['PLI_rej'] and config['rereference']:
         # print('PLI')
@@ -193,7 +197,8 @@ def define_all_inputs():
     # Else: default case run_all
     else:
         # print('hola')
-        return rules.identify_regions.output.out_edf, rules.merge_tsv.output.out_files[-1], rules.merge_json.output.out_files
+        return rules.identify_regions.output.out_edf, rules.merge_tsv.output.out_files[-1], rules.merge_files.output.out_json,\
+        rules.unfold_masks.output.out_masks[0], rules.unfold_masks.output.out_masks[1], rules.merge_files.output.out_colormask
 
 rule all:
     input:

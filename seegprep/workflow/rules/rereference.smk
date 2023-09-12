@@ -44,13 +44,13 @@ rule rereference:
                         rec='reref',
                         **out_edf_wc
                 ),
-        out_tsv = bids(
+        out_tsv = temp(bids(
                         root=out_dir_reref(),
                         datatype='ieeg',
                         suffix='reref_native_space.tsv',
                         rec='reref',
                         **out_edf_wc
-                ),
+                )),
     resources:
         mem_mb = 16000,
     threads: 16
