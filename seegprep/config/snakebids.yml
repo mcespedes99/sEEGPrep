@@ -178,10 +178,12 @@ t1_to_coords_tfm: False
 # Data resources
 colortable: resources/colortables/desc-subfields_atlas-bigbrain_dseg.tsv
 clinical_snsx: resources/mapping_snsx_clinical.tsv
-root_snsx: ['/project/ctb-akhanf/cfmm-bids/Khan/SNSX_7T_2021/correct7T.dev/gradcorrect_v0.0.3',
-'/project/ctb-akhanf/cfmm-bids/Khan/SNSX_7T/tar2bids_v0.0.5e/correct7T.v0.3/gradcorrect_v0.0.3',
-'/project/ctb-akhanf/cfmm-bids/Khan/SNSX_7T/tar2bids_v0.0.5e/correct7T.v0.3/gradcorrect_v0.0.3']
-acq_snsx: ['MP2RAGEpostproc', 'MP2RAGE', 'MEMP2RAGE']
+root_snsx: ['/project/ctb-akhanf/cfmm-bids/Khan/SNSX/master/7T/bids',
+'/project/ctb-akhanf/cfmm-bids/Khan/SNSX/master/7T/bids',
+'/project/ctb-akhanf/cfmm-bids/Khan/SNSX/master/3T/bids',
+'/project/ctb-akhanf/cfmm-bids/Khan/SNSX_7T_2021/correct7T.dev/gradcorrect_v0.0.3']
+# '/project/ctb-akhanf/cfmm-bids/Khan/SNSX_7T/tar2bids_v0.0.5e/correct7T.v0.3/gradcorrect_v0.0.3',
+acq_snsx: ['MP2RAGE', 'MEMP2RAGE', 'MPRAGE', 'MP2RAGEpostproc',]
 seg_path: ['/scratch/mcesped/Results/hippunfold/batch-hippunfold/hippunfold/sub-{subject}/anat/sub-{subject}_hemi-L_space-cropT1w_desc-subfields_atlas-bigbrain_dseg.nii.gz',
 '/scratch/mcesped/Results/hippunfold/batch-hippunfold/hippunfold/sub-{subject}/anat/sub-{subject}_hemi-R_space-cropT1w_desc-subfields_atlas-bigbrain_dseg.nii.gz']
 # seg_path: ['/project/ctb-akhanf/myousif9/snsx/output/snsx_hippunfold_12152022/hippunfold/sub-{subject}/anat/sub-{subject}_hemi-L_space-cropT1w_desc-subfields_atlas-bigbrain_dseg.nii.gz',

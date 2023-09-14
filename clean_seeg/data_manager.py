@@ -19,6 +19,7 @@ import SimpleITK as sitk
 from skimage.morphology import dilation
 from skimage.morphology import ball
 from pathlib import Path
+from scipy.ndimage import gaussian_filter
 
 
 # Function to create bipolar channels from given unipolars
@@ -116,14 +117,23 @@ def create_bipolars(electrodes_df, electrodes_edf, processes, df_cols=None):
         }
     channels = {}
     # Try to options of labels
-    pattern1 = r"([A-Z0-9]+[-]+)(\d+)$"  # for electrodes like 'LOpS-10' or 'LOpS1-10'
-    pattern2 = r"([A-Z]+[-]*)(\d+)$"  # for electrodes like 'LOpS10'
+    # 1st: for electrodes like 'LOpS-10' or 'LOpS1-10'
+    # 2nd: for electrodes like 'LOpS10'
+    pattern = [
+        r"([A-Z0-9]+[-]+)(\d+)$",
+        r"([A-Z]+[-]*)(\d+)$",
+        r"([A-Z]+[0-9]+[A-Z]+[-]*)(\d+)$",
+    ]
     # Extract channels info
     for electrode in electrodes_df[df_cols["label"]].values:
         if electrode in electrodes_edf:
-            match = re.match(pattern1, electrode, re.IGNORECASE)
+            match = None
+            n = 0
+            while (not match) and (n < len(pattern)):
+                match = re.match(pattern[n], electrode, re.IGNORECASE)
+                n += 1
             if not match:
-                match = re.match(pattern2, electrode, re.IGNORECASE)
+                raise Exception(f"Channel {electrode} did not match any of the regex.")
             if match.group(1) in channels.keys():
                 channels[match.group(1)].append(match.group(2))
             else:
@@ -335,7 +345,6 @@ def get_regions_from_mask(
     # Assign unknown in this case.
     id = []
     regions_per_chn = dict()
-    print(colormask_df.head())
     for chn in chn_names:
         if len(colormask_df["channel"].tolist()) > 0:
             # Get information from colortable of masks
@@ -345,9 +354,6 @@ def get_regions_from_mask(
             )
             scalars_chn = colormask_df["scalar"][bool_chn + bool_chn2].to_numpy()
             files_chn = colormask_df["parc_id"][bool_chn + bool_chn2].to_numpy()
-            if chn == "RHc1-2":
-                print(scalars_chn)
-                print(files_chn)
             # If outside of the cropped space:
             if len(scalars_chn) == 0:
                 id.append(0)
@@ -670,10 +676,14 @@ def get_mask(parc_list, elec_df, df_cols, tfm_list, masks_out, colortable_out):
                         id_ball[1][0] : id_ball[1][1],
                         id_ball[2][0] : id_ball[2][1],
                     ]
+                # Apply Gaussian filter to smooth the mask
+                chn_mask = gaussian_filter(dilated.astype(float), sigma=0.6)
+                # Update dilated to match chn_mask
+                dilated = chn_mask > 0
                 # Update mask if contains useful info
                 if (data_parc[dilated] != 0).any():
                     # Save electrode mask
-                    chn_img = nb.Nifti1Image(dilated, parc.affine, parc.header)
+                    chn_img = nb.Nifti1Image(chn_mask, parc.affine, parc.header)
                     chn_img_name = (
                         filename_no_suffix + f"_chn-{labels_chns[idx]}" + suffixes
                     )

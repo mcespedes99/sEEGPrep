@@ -15,10 +15,6 @@ def get_7T(wildcards):
                 )
         if os.path.exists(t1_snsx):
             return t1_snsx
-        # Try without capital P
-        t1_snsx = t1_snsx.replace('sub-P', 'sub-p')
-        if os.path.exists(t1_snsx):
-            return t1_snsx
     return t1_snsx
     
 

@@ -59,7 +59,7 @@ def main():
             json_out=out_json,
         )
     except:
-        logging.exception("Got exception on main handler")
+        logging.exception("Got exception on main handler.")
         raise
 
 

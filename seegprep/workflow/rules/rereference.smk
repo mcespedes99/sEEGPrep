@@ -53,6 +53,7 @@ rule rereference:
                 )),
     resources:
         mem_mb = 16000,
+        time = 120,
     threads: 16
     benchmark:
        bids(
