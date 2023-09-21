@@ -4,7 +4,7 @@ from .utils import (
     get_orig_data,
     get_chn_positions,
     downsampling,
-    remove_trend
+    remove_trend,
 )
 from .clean_autoreject import create_mne_epochs, run_autoreject
 from .clean_flatlines import clean_flatlines
@@ -67,7 +67,14 @@ class cleanSEEG:
 
     # Epoch extraction
     def extract_epochs(
-        self, event_label, out_root=None, out_files=None, tmpdir=None, snakemake=False
+        self,
+        n_samples=None,
+        event_dur=None,
+        event_label=None,
+        out_root=None,
+        out_files=None,
+        tmpdir=None,
+        snakemake=False,
     ):
         import pyedflib
         import shutil
@@ -77,18 +84,31 @@ class cleanSEEG:
         import bids
         import numpy as np
 
+        assert n_samples or event_dur
         # Find indexes from events
         f = pyedflib.EdfReader(self.edf_path)
-        id = [
-            value[0]
-            for value in enumerate(f.readAnnotations()[2])
-            if re.match(event_label, value[1], re.IGNORECASE)
-        ]
-        # Create df with annotations
-        onset_list = f.readAnnotations()[0]
+        # Get number of samples if not defined
+        if not n_samples:
+            # Sampling rate:
+            srate = f.getSampleFrequencies()[0] / f.datarecord_duration
+            # Get number of samples based on event duration
+            n_samples = event_dur * srate
+        if event_label:
+            id = [
+                value[0]
+                for value in enumerate(f.readAnnotations()[2])
+                if re.match(event_label, value[1], re.IGNORECASE)
+            ]
+            # Create df with annotations
+            onset_list = f.readAnnotations()[0]
+            # Find time stamps where the 'awake trigger' event is happening
+            time_stamps_init = onset_list[id]
+        else:
+            # Number of samples in edf
+            N = f.getNSamples()[0]
+            time_stamps_init = np.arange(N)[::n_samples]
+
         f.close()
-        # Find time stamps where the 'awake trigger' event is happening
-        time_stamps = onset_list[id]
         # print(time_stamps)
         # Copy file to local scratch if possible
         new_edf = None
@@ -103,14 +123,12 @@ class cleanSEEG:
         entities = bids.layout.parse_file_entities(self.edf_path)
         # Combine 'extension' with 'suffix' and delete the first one
         if snakemake:
-            entities["suffix"] = "ieeg_tmp.edf"
-        else:
-            entities["suffix"] = "ieeg.edf"
+            entities["suffix"] = entities["suffix"] + "_tmp" + entities["extension"]
         del entities["extension"]
         # Add 'task'
         entities["rec"] = "clip"
         # Here call function to create new EDF file
-        for index, event_timestamp in enumerate(time_stamps):
+        for index, event_timestamp in enumerate(time_stamps_init):
             if out_files == None:
                 # New file name
                 entities["clip"] = f"{index+1:02}"
@@ -125,11 +143,17 @@ class cleanSEEG:
                 out_edf_path = list(filter(reg.search, out_files))[0]
             if new_edf == None:
                 create_epoch_EDF(
-                    self.edf_path, event_timestamp, out_edf_path, self.processes
+                    self.edf_path,
+                    event_timestamp,
+                    n_samples,
+                    out_edf_path,
+                    self.processes,
                 )
             else:
                 print("aqui")
-                create_epoch_EDF(new_edf, event_timestamp, out_edf_path, self.processes)
+                create_epoch_EDF(
+                    new_edf, event_timestamp, n_samples, out_edf_path, self.processes
+                )
         if new_edf != None:
             print("delete")
             os.remove(new_edf)
@@ -200,7 +224,7 @@ class cleanSEEG:
         write_edf=False,
         out_edf_path=None,
         vol_version=False,
-        json_out = None
+        json_out=None,
     ):
         import os
         import pyedflib

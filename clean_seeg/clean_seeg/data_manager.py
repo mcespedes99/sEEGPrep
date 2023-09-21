@@ -514,7 +514,9 @@ def get_electrodes_id(parc, elec_df, df_cols, tfm_list):
 # Function to get rgb values for each contact
 def get_label_rgb(parc, elec_df, tfm_list, label_map, df_cols, vol_version):
     if vol_version:
-        id, regions_per_chn = mask_and_get_region(parc, elec_df, df_cols, tfm_list, label_map)
+        id, regions_per_chn = mask_and_get_region(
+            parc, elec_df, df_cols, tfm_list, label_map
+        )
     else:
         # vox, data_parc = ras2vox(parc, elec_df, non_cont_to_cont_tf)
         id, elec_df = get_electrodes_id(parc, elec_df, df_cols, tfm_list)
@@ -546,7 +548,9 @@ def extract_location(
     # Load parcellation file
     parc_obj = nb.load(parc_path)
     # Create df
-    df, regions_per_chn = get_label_rgb(parc_obj, chn_info_df, tfm_list, labels, df_cols, vol_version)
+    df, regions_per_chn = get_label_rgb(
+        parc_obj, chn_info_df, tfm_list, labels, df_cols, vol_version
+    )
     # if not os.path.exists(out_tsv_name):
     #     df.to_csv(out_tsv_name, sep = '\t')
     return df, regions_per_chn
@@ -763,7 +767,7 @@ def extract_channel_epoch(chn_number, edf_file, srate_data, time_ids):
 
 
 # Function to create epochs and EDF file from them
-def create_epoch_EDF(edf_file, timestamp, out_path, processes):
+def create_epoch_EDF(edf_file, timestamp_init, n_val, out_path, processes):
     try:
         edf_in = pyedflib.EdfReader(edf_file)
         # First import labels
@@ -788,13 +792,13 @@ def create_epoch_EDF(edf_file, timestamp, out_path, processes):
         t = np.arange(0, N + 1) / srate
         # The plus 1 is required since the t[id] indicates start points.
         # Time ids
-        t_init_id = np.abs(np.subtract(t, timestamp)).argmin()
-        t_end_id = int(np.floor(t_init_id + 240 * srate))  # TODO: customizable
-        n_val = t_end_id - t_end_id
+        t_init_id = np.abs(np.subtract(t, timestamp_init)).argmin()
+        n_val = min(n_val, N - t_init_id)
+        t_end_id = t_init_id + n_val
         t_end_id = int(t_end_id - n_val % edf_in.getSampleFrequencies()[0])
         t_ids = (t_init_id, t_end_id)
         # Relative initial time for epoch
-        t_0 = t[np.abs(np.subtract(t, timestamp)).argmin()]
+        t_0 = t[np.abs(np.subtract(t, timestamp_init)).argmin()]
         edf_out.writeAnnotation(0, -1, "Recording starts")
         # Headers for unipolar case
         headers = edf_in.getSignalHeaders()
