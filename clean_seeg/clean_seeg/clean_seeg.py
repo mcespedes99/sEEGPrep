@@ -88,11 +88,19 @@ class cleanSEEG:
         # Find indexes from events
         f = pyedflib.EdfReader(self.edf_path)
         # Get number of samples if not defined
+        # Sampling rate:
+        srate = f.getSampleFrequencies()[0] / f.datarecord_duration
         if not n_samples:
-            # Sampling rate:
-            srate = f.getSampleFrequencies()[0] / f.datarecord_duration
             # Get number of samples based on event duration
             n_samples = event_dur * srate
+        # Adjust n_samples depending on the datarecord duration and the number of samples in file
+        # Number of samples in edf
+        N = f.getNSamples()[0]
+        n_blocks = N / f.getSampleFrequencies()[0]
+        remainder = n_samples % f.getSampleFrequencies()[0]
+        if remainder != 0:
+            n_samples += f.getSampleFrequencies()[0] - remainder
+        # Find timestamps
         if event_label:
             id = [
                 value[0]
@@ -104,9 +112,8 @@ class cleanSEEG:
             # Find time stamps where the 'awake trigger' event is happening
             time_stamps_init = onset_list[id]
         else:
-            # Number of samples in edf
-            N = f.getNSamples()[0]
-            time_stamps_init = np.arange(N)[::n_samples]
+            t = np.arange(0, N) / srate
+            time_stamps_init = t[::n_samples]
 
         f.close()
         # print(time_stamps)

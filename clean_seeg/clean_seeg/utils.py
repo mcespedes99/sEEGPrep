@@ -24,21 +24,29 @@ def remove_trend(raw, method, srate, Transition):
 
 
 def downsampling(chn, edf_file, orig_srate, target_srate):
-    from scipy.interpolate import griddata
-    import scipy.signal
     import pyedflib
 
-    # Based on code from Mike X Cohen course (Complete neural signal processing and analysis: Zero to hero)
     # Get the signal
     edf_in = pyedflib.EdfReader(edf_file)
     signal = edf_in.readSignal(chn)
     edf_in.close()
+
+    signal_dsG, downsampledSrate = downsample_signal(signal, orig_srate, target_srate)
+
+    return signal_dsG, downsampledSrate
+
+
+def downsample_signal(signal, orig_srate, target_srate):
+    from scipy.interpolate import griddata
+    import scipy.signal
+
+    # Based on code from Mike X Cohen course (Complete neural signal processing and analysis: Zero to hero)
     if orig_srate < target_srate:
         raise Exception(
             "This function only works to downsample and the given original sample rate is bigger than the target one."
         )
     elif orig_srate == target_srate:
-        return signal
+        return signal, orig_srate
     # Get info from given signal
     npnts = signal.shape[-1]
     time = np.arange(0, npnts) / orig_srate

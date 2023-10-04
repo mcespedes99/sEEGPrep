@@ -757,7 +757,7 @@ def extract_time_ids(epoch_id, time_vector, timestamps_array, srate):
 
 
 # Function to extract epochs
-def extract_channel_epoch(chn_number, edf_file, srate_data, time_ids):
+def extract_channel_epoch(chn_number, edf_file, time_ids):
     edf_in = pyedflib.EdfReader(edf_file)
     n_val = time_ids[1] - time_ids[0]
     signal = edf_in.readSignal(chn_number, start=time_ids[0], n=n_val)
@@ -794,7 +794,9 @@ def create_epoch_EDF(edf_file, timestamp_init, n_val, out_path, processes):
         # Time ids
         t_init_id = np.abs(np.subtract(t, timestamp_init)).argmin()
         n_val = min(n_val, N - t_init_id)
-        t_end_id = t_init_id + n_val
+        t_end_id = (
+            t_init_id + n_val
+        )  # has to be this way so that when I substract them, I get n_val back
         t_end_id = int(t_end_id - n_val % edf_in.getSampleFrequencies()[0])
         t_ids = (t_init_id, t_end_id)
         # Relative initial time for epoch
@@ -812,7 +814,6 @@ def create_epoch_EDF(edf_file, timestamp_init, n_val, out_path, processes):
                 partial(
                     extract_channel_epoch,
                     edf_file=edf_file,
-                    srate_data=srate,
                     time_ids=t_ids,
                 ),
                 chn_lists,
@@ -830,7 +831,9 @@ def create_epoch_EDF(edf_file, timestamp_init, n_val, out_path, processes):
         edf_out.writeSamples(channel_data)
         # Write annotations
         edf_out.writeAnnotation(t[t_init_id] - t_0, -1, f"Epoch starts.")
-        edf_out.writeAnnotation(t[t_end_id + 1] - t_0, -1, f"Epoch ends.")
+        edf_out.writeAnnotation(
+            t[t_end_id] - t_0, -1, f"Epoch ends."
+        )  # This no longer needs the +1
         # The plus 1 is required since the t[id] indicates start points, for the end epoch,
         # we want the final of the last datarecord!
         # Deallocate space in memory
