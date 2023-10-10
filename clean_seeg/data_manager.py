@@ -966,7 +966,7 @@ def create_epoch_EDF(edf_file, timestamp, out_path, processes):
         # Time ids
         t_init_id = np.abs(np.subtract(t, timestamp)).argmin()
         t_end_id = int(np.floor(t_init_id + 240 * srate))  # TODO: customizable
-        n_val = t_end_id - t_end_id
+        n_val = t_end_id - t_init_id
         t_end_id = int(t_end_id - n_val % edf_in.getSampleFrequencies()[0])
         t_ids = (t_init_id, t_end_id)
         # Relative initial time for epoch

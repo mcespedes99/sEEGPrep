@@ -13,9 +13,9 @@ rule run_synthseg:
         ),
     container:
         config["singularity"]["graham"]["diffparc"]
-    threads: 8
+    threads: 16
     resources:
-        mem_mb=16000,
+        mem_mb=32000,
     group:
         "anat"
     shell:

@@ -49,7 +49,7 @@ rule fixheader_synthstrip:
     group:
         "anat"
     container:
-        config["singularity"]["graham"]["diffparc"]
+        config["singularity"]["graham"]["autotop"]
     shell:
         "c3d {input.t1} {input.mask} -copy-transform -o {output.mask}"
 
@@ -68,7 +68,7 @@ rule n4_t1_withmask:
         ),
     threads: 8
     container:
-        config["singularity"]["graham"]["diffparc"]
+        config["singularity"]["graham"]["autotop"]
     group:
         "anat"
     shell:
@@ -89,7 +89,7 @@ rule mask_subject_t1w:
             desc="masked"
         ),
     container:
-        config["singularity"]["graham"]["diffparc"]
+        config["singularity"]["graham"]["autotop"]
     group:
         "anat"
     shell:

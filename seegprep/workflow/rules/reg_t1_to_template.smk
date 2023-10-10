@@ -8,7 +8,7 @@ rule mask_template_t1w:
         )
         + "_desc-masked_T1w.nii.gz",
     container:
-        config["singularity"]["graham"]["diffparc"]
+        config["singularity"]["graham"]["autotop"]
     group:
         "anat"
     shell:
@@ -106,7 +106,7 @@ rule greedy_t1_to_template:
         mem_mb=16000,  # right now these are on the high-end -- could implement benchmark rules to do this at some point..
         time=60,  # 1 hrs
     container:
-        config["singularity"]["graham"]["diffparc"]
+        config["singularity"]["graham"]["autotop"]
     group:
         "anat"
     log:

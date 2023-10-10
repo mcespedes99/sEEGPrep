@@ -175,6 +175,17 @@ t1_to_coords_tfm: False
 # Transform is not required in my case as I'm using T1w.nii.gz file, which is always in
 # the same position as the electrodes coordinates (contrast space)
 
+# Templates
+template: MNI152NLin2009cAsym
+template_t1w: resources/tpl-MNI152NLin2009cAsym/tpl-MNI152NLin2009cAsym_res-01_T1w.nii.gz
+template_mask: resources/tpl-MNI152NLin2009cAsym/tpl-MNI152NLin2009cAsym_res-01_desc-brain_mask.nii.gz 
+# template: MNI152NLin2009cSym
+# template_t1w: resources/tpl-MNI152NLin2009cSym/tpl-MNI152NLin2009cSym_res-1_T1w.nii.gz
+# template_mask: resources/tpl-MNI152NLin2009cSym/tpl-MNI152NLin2009cSym_res-1_desc-brain_mask.nii.gz 
+# template: MNI305
+# template_t1w: resources/tpl-MNI305/tpl-MNI305_T1w.nii.gz
+# template_mask: resources/tpl-MNI305/tpl-MNI305_desc-brain_mask.nii.gz 
+
 # Data resources
 colortable: resources/colortables/desc-subfields_atlas-bigbrain_dseg.tsv
 clinical_snsx: resources/mapping_snsx_clinical.tsv
