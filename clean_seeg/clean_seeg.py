@@ -16,7 +16,8 @@ from .data_manager import (
     apply_bipolar_criteria,
     get_chn_info,
     create_epoch_EDF,
-    get_mask
+    get_mask,
+    get_unfolded_coords,
 )
 import logging
 
@@ -192,6 +193,8 @@ class cleanSEEG:
         self,
         parc_list,
         colortable_file,  # colortable has to be a tsv with at least index, name
+        AP_niftis,  # this one and the ones below are a tuple (L, R)
+        PD_niftis,
         use_reref=True,
         write_tsv=False,
         out_tsv_path=None,
@@ -201,7 +204,7 @@ class cleanSEEG:
         write_edf=False,
         out_edf_path=None,
         vol_version=False,
-        masks_out=None, 
+        masks_out=None,
         colormask_out=None,
         json_out=None,
     ):
@@ -231,6 +234,9 @@ class cleanSEEG:
                 "type",
                 "group",
                 "label",
+                "x",
+                "y",
+                "z",
                 "x_init",
                 "x_end",
                 "y_init",
@@ -254,7 +260,9 @@ class cleanSEEG:
         # TODO: verify format of df_cols based on "vol_version"
         if vol_version:
             assert masks_out, colormask_out
-            colormask_df, masks_list = get_mask(parc_list, chn_info_df, df_cols, self.tfm, masks_out, colormask_out)
+            colormask_df, masks_list = get_mask(
+                parc_list, chn_info_df, df_cols, self.tfm, masks_out, colormask_out
+            )
         else:
             colormask_df, masks_list = [None, None]
         # Create tsv file with information about location of the channels
@@ -266,8 +274,17 @@ class cleanSEEG:
             colortable_file,
             vol_version,
             colormask_df,
-            masks_list
+            masks_list,
         )
+        # Get coordinates in unfolded space
+        df_location = get_unfolded_coords(
+            df_location,
+            df_cols,
+            self.tfm,
+            AP_niftis,  # this one and the ones below are a tuple (L, R)
+            PD_niftis,
+        )
+
         if write_tsv:
             if os.path.exists(out_tsv_path):
                 logging.warning(f" tsv file {out_tsv_path} will be overwritten.")

@@ -59,6 +59,10 @@ rule identify_regions:
         edf_tsv = region_id_inputs(),
         parc_list = get_segmentation,
         tfm = rules.transform_7T_to_clinical.output.tfm, # need to create new rule to go from 7T to 1.5T
+        AP_niftis = partial(get_coords, 'AP_nifti'),
+        PD_niftis = partial(get_coords, 'PD_nifti'),
+        AP_giftis = rules.coords_to_surf.output.out_AP_giftis,
+        PD_giftis = rules.coords_to_surf.output.out_PD_giftis,
     params:
         colortable = os.path.join(workflow.basedir, "..", config['colortable']),
         reref_run = config['run_all'] or config['rereference'] or run_all,

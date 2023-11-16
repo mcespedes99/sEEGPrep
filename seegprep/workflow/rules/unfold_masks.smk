@@ -19,13 +19,6 @@ def get_unfolded_masks(wc_values):
     # print(segmentations)
     return masks
 
-def get_surfaces(type_surf, wildcards):
-    surfaces = []
-    for surf in config[type_surf]:
-        surfaces += expand(surf, subject=mapping_clinical_to_7T[f"P{wildcards.subject}"])
-    # print(segmentations)
-    return surfaces
-
 # Rule to merge tsv files (there should be only for each initial edf file, not 1 for clip)
 rule unfold_masks:
     input:

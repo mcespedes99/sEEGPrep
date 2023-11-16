@@ -138,6 +138,7 @@ if config['PLI_rej'] or config['run_all'] or run_all:
 ## Region identification
 if config['regions_id'] or config['run_all'] or run_all:
     include: "rules/transform.smk"
+    include: 'rules/coords_to_surf.smk'
     # include: "rules/merge_labels.smk"
     include: "rules/identify_regions.smk"
 
@@ -163,7 +164,7 @@ def define_all_inputs():
         # Only use last output of the rules.merge_tsv.output.out_files, which is the one under bids
         return rules.identify_regions.output.out_edf, rules.merge_tsv.output.out_files[-1], rules.merge_files.output.out_json, \
         rules.unfold_masks.output.out_masks[0], rules.unfold_masks.output.out_masks[1], rules.merge_files.output.out_colormask,\
-        rules.greedy_t1_to_template.output.warped_flo[-1]
+        rules.greedy_t1_to_template.output.warped_flo[-1], rules.coords_to_surf.output.out_AP_giftis[-1]
     # Power line rejection is the last step and rereference is called
     elif config['PLI_rej'] and config['rereference']:
         # print('PLI')
@@ -201,7 +202,7 @@ def define_all_inputs():
         # print('hola')
         return rules.identify_regions.output.out_edf, rules.merge_tsv.output.out_files[-1], rules.merge_files.output.out_json,\
         rules.unfold_masks.output.out_masks[0], rules.unfold_masks.output.out_masks[1], rules.merge_files.output.out_colormask,\
-        rules.greedy_t1_to_template.output.warped_flo[-1]
+        rules.greedy_t1_to_template.output.warped_flo[-1], rules.coords_to_surf.output.out_AP_giftis[-1]
 
 rule all:
     input:

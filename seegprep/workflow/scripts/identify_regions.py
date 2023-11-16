@@ -16,6 +16,8 @@ def main():
     parc_list = snakemake.input.parc_list
     colortable_file = snakemake.params.colortable
     tfm = snakemake.input.tfm
+    AP_niftis = snakemake.input.AP_niftis
+    PD_niftis = snakemake.input.PD_niftis
     processes = snakemake.config["processes"]
     out_edf = snakemake.output.out_edf
     out_tsv = snakemake.output.out_tsv
@@ -45,6 +47,8 @@ def main():
         df = seegTF.identify_regions(
             parc_list,
             colortable_file,
+            AP_niftis,  # this one and the ones below are a tuple (L, R)
+            PD_niftis,
             use_reref=False,
             write_tsv=True,
             out_tsv_path=out_tsv,

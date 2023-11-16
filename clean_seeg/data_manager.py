@@ -90,6 +90,12 @@ def bipolar_info(id, dict_key, channels_dict, elec_pos, df_cols):
             "type": inf_chn1[df_cols["type"]].values[0],
             "group": inf_chn1[df_cols["group"]].values[0],
             "label": bipolar_chn,
+            "x": (inf_chn1[df_cols["x"]].values[0] + inf_chn2[df_cols["x"]].values[0])
+            / 2,
+            "y": (inf_chn1[df_cols["y"]].values[0] + inf_chn2[df_cols["y"]].values[0])
+            / 2,
+            "z": (inf_chn1[df_cols["z"]].values[0] + inf_chn2[df_cols["z"]].values[0])
+            / 2,
             "x_init": inf_chn1[df_cols["x"]].values[0],
             "x_end": inf_chn2[df_cols["x"]].values[0],
             "y_init": inf_chn1[df_cols["y"]].values[0],
@@ -372,8 +378,6 @@ def get_regions_from_mask(
                         mask_chn += mask == scalar
                     # Get masked data
                     regions_chn = data_parc[mask_chn]
-                    if chn == "RHc1-2":
-                        print(np.unique(regions_chn))
                     # Get frequency of each region for this channel
                     for label in np.unique(regions_chn):
                         freq_labels.append(
@@ -450,7 +454,7 @@ def get_electrodes_id(parc_objs, elec_df, df_cols, tfm_list):
         inv_affine = np.linalg.inv(parc.affine)
         # here's where the interpolation should be performed!!
         vox = np.round((mne.transforms.apply_trans(inv_affine, mri_ras_mm))).astype(int)
-        parc_vox.append(data_parc, vox)
+        parc_vox.append((data_parc, vox))
     # print(vox)
     # Try to get all the indexes
     # For hippunfold, the space is cropped, so it might be the case that one of the vox values is outside of the cropped space.
@@ -728,6 +732,65 @@ def get_mask(parc_list, elec_df, df_cols, tfm_list, masks_out, colortable_out):
     return colortable_df, masks_list
 
 
+def get_unfolded_coords(
+    elec_df,
+    df_cols,
+    tfm,  # subj to clinical
+    AP_niftis,  # this one and the one below are a tuple (L, R)
+    PD_niftis,
+):
+    # Coordinates in MRI RAS
+    mri_ras_mm = elec_df[[df_cols["x"], df_cols["y"], df_cols["z"]]].values
+
+    # Apply transform
+    tfm, _ = tfm[0]
+    tfm = readRegMatrix(tfm)
+    mri_ras_mm = mne.transforms.apply_trans(tfm, mri_ras_mm)
+
+    # Get all possible voxels
+    img_vox = []
+    for img_path in AP_niftis:
+        img = nb.load(img_path)
+        # Load data of parcellations
+        data_img = np.asarray(img.dataobj)
+        # To voxels
+        inv_affine = np.linalg.inv(img.affine)
+        # here's where the interpolation should be performed!!
+        vox = np.round((mne.transforms.apply_trans(inv_affine, mri_ras_mm))).astype(int)
+        img_vox.append((data_img, vox))
+
+    # Create empty out array
+    AP_PD_coords = np.zeros((mri_ras_mm.shape[0], 2))
+    AP_PD_coords[:] = np.nan
+    for idx in range(mri_ras_mm.shape[0]):
+        AP_coord = -1
+        # For each parcellation
+        i = 0
+        while (AP_coord == -1 or np.round(AP_coord, 3) == 0) and i < len(img_vox):
+            data_img, vox = img_vox[i]
+            # If inside the cropped space:
+            if not (
+                (vox[idx, 0] >= data_img.shape[0])
+                or (vox[idx, 1] >= data_img.shape[1])
+                or (vox[idx, 2] >= data_img.shape[2])
+                or (vox[idx, :] < 0).any()
+            ):
+                AP_coord = data_img[vox[idx, 0], vox[idx, 1], vox[idx, 2]]
+            i += 1
+        # If there's a coordinate
+        if AP_coord != -1 and np.round(AP_coord, 4) != 0:
+            # Get PD coordinate and it is actually inside of the hippocampus
+            PD_img = nb.load(PD_niftis[i - 1])
+            data_img = np.asarray(PD_img.dataobj)
+            PD_coord = data_img[vox[idx, 0], vox[idx, 1], vox[idx, 2]]
+            # Change array
+            AP_PD_coords[idx, :] = [AP_coord, PD_coord]
+    # Append to df
+    elec_df["AP"] = AP_PD_coords[:, 0].squeeze()
+    elec_df["PD"] = AP_PD_coords[:, 1].squeeze()
+    return elec_df
+
+
 # Function to extract useful information from csv file
 def get_chn_info(
     csv_file, electrodes_edf, df_cols=None, vol_version=False
@@ -750,6 +813,9 @@ def get_chn_info(
             "type": "type",
             "group": "group",
             "label": "label",
+            "x": "x",
+            "y": "y",
+            "z": "z",
             "x_init": "x_init",
             "x_end": "x_end",
             "y_init": "y_init",

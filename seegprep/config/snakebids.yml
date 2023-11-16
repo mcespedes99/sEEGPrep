@@ -205,7 +205,10 @@ midthickness_path: ['/scratch/mcesped/Results/hippunfold/batch-hippunfold/hippun
 '/scratch/mcesped/Results/hippunfold/batch-hippunfold/hippunfold/sub-{subject}/surf/sub-{subject}_hemi-R_space-T1w_den-0p5mm_label-hipp_midthickness.surf.gii']
 outer_path: ['/scratch/mcesped/Results/hippunfold/batch-hippunfold/hippunfold/sub-{subject}/surf/sub-{subject}_hemi-L_space-T1w_den-0p5mm_label-hipp_outer.surf.gii',
 '/scratch/mcesped/Results/hippunfold/batch-hippunfold/hippunfold/sub-{subject}/surf/sub-{subject}_hemi-R_space-T1w_den-0p5mm_label-hipp_outer.surf.gii']
-
+AP_nifti: ['/scratch/mcesped/Results/hippunfold/batch-hippunfold/hippunfold/sub-{subject}/coords/sub-{subject}_dir-AP_hemi-L_space-cropT1w_label-hipp_desc-laplace_coords.nii.gz',
+'/scratch/mcesped/Results/hippunfold/batch-hippunfold/hippunfold/sub-{subject}/coords/sub-{subject}_dir-AP_hemi-R_space-cropT1w_label-hipp_desc-laplace_coords.nii.gz']
+PD_nifti: ['/scratch/mcesped/Results/hippunfold/batch-hippunfold/hippunfold/sub-{subject}/coords/sub-{subject}_dir-PD_hemi-L_space-cropT1w_label-hipp_desc-laplace_coords.nii.gz',
+'/scratch/mcesped/Results/hippunfold/batch-hippunfold/hippunfold/sub-{subject}/coords/sub-{subject}_dir-PD_hemi-R_space-cropT1w_label-hipp_desc-laplace_coords.nii.gz']
 #-------------------------------BIDS APP Configuration---------------------------
 #this configures the options to save the BIDSLayout
 # by default, database is not saved (uncomment to save)
