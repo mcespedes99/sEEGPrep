@@ -18,6 +18,7 @@ import sys
 import SimpleITK as sitk
 from skimage.morphology import dilation
 from skimage.morphology import ball
+import datetime
 
 
 # Function to create bipolar channels from given unipolars
@@ -435,6 +436,36 @@ def mask_and_get_region(parc, elec_df, df_cols, tfm_list, label_map):
     id = np.array(id)
     return id, regions_per_chn
 
+def transform_coordinates(mri_ras_mm, tfm_list):
+    # mri_ras_coords: Array (3xn)
+    # Apply transforms
+    for tfm, inv_bool in tfm_list:
+        if type(tfm) == str:
+            if tfm.endswith("txt"):
+                tfm = readRegMatrix(tfm)
+                if inv_bool:
+                    tfm = np.linalg.inv(tfm)
+                mri_ras_mm = mne.transforms.apply_trans(tfm, mri_ras_mm)
+            elif tfm.endswith("nii.gz"):
+                # reads the transform and casts the output compaitble format
+                transform_image = sitk.ReadImage(tfm)
+                transform_image = sitk.Cast(transform_image, sitk.sitkVectorFloat64)
+                # load it as a transform
+                identity_transform = sitk.Transform(transform_image)
+                # Convert points from RAS to LPS
+                mri_mni_lps = mri_ras_mm * np.array([-1, -1, 1])
+                # Transform
+                for point_id in range(mri_mni_lps.shape[0]):
+                    mri_mni_lps[point_id, :] = np.array(
+                        identity_transform.TransformPoint(mri_mni_lps[point_id, :])
+                    )
+                # Convert from LPS back to RAS
+                mri_ras_mm = mri_mni_lps * np.array([-1, -1, 1])
+        else:
+            if inv_bool:
+                tfm = np.linalg.inv(tfm)
+            mri_ras_mm = mne.transforms.apply_trans(tfm, mri_ras_mm)
+    return mri_ras_mm
 
 # Function to get label id based on parcellation obj
 # TODO: test function in jupyter notebook
@@ -772,18 +803,9 @@ def create_epoch_EDF(edf_file, timestamp_init, n_val, out_path, processes):
         edf_in = pyedflib.EdfReader(edf_file)
         # First import labels
         labels = edf_in.getSignalLabels()
-        # Create file:
-        edf_out = pyedflib.EdfWriter(
-            out_path, len(labels), file_type=pyedflib.FILETYPE_EDFPLUS
-        )
-        # First set the data from the header of the edf file:
-        edf_out.setHeader(edf_in.getHeader())
-        # f.datarecord_duration gives the value is sec and setDatarecordDuration receives it in units
-        # of 10 ms. Therefore: setDatarecordDuration = datarecord_duration*10^6 / 10
-        edf_out.setDatarecordDuration(
-            int(edf_in.datarecord_duration * 100000)
-        )  # This actually is used to set the sample frequency
-        # Set each channel info:
+        # First get the data from the header of the edf file
+        header = edf_in.getHeader()
+        # Get each channel info:
         # Sampling rate:
         srate = edf_in.getSampleFrequencies()[0] / edf_in.datarecord_duration
         # Build epochs
@@ -801,7 +823,6 @@ def create_epoch_EDF(edf_file, timestamp_init, n_val, out_path, processes):
         t_ids = (t_init_id, t_end_id)
         # Relative initial time for epoch
         t_0 = t[np.abs(np.subtract(t, timestamp_init)).argmin()]
-        edf_out.writeAnnotation(0, -1, "Recording starts")
         # Headers for unipolar case
         headers = edf_in.getSignalHeaders()
         # Close file
@@ -818,6 +839,24 @@ def create_epoch_EDF(edf_file, timestamp_init, n_val, out_path, processes):
                 ),
                 chn_lists,
             )
+        
+        # Start writing
+        # Create file:
+        edf_out = pyedflib.EdfWriter(
+            out_path, len(labels), file_type=pyedflib.FILETYPE_EDFPLUS
+        )
+        # Change the start date of the header
+        start_date = edf_in.getStartdatetime()
+        delta = datetime.timedelta(seconds=t_0)
+        new_date = start_date + delta
+        header['startdate']=new_date
+        edf_out.setHeader(header)
+        # f.datarecord_duration gives the value is sec and setDatarecordDuration receives it in units
+        # of 10 ms. Therefore: setDatarecordDuration = datarecord_duration*10^6 / 10
+        edf_out.setDatarecordDuration(
+            int(edf_in.datarecord_duration * 100000)
+        )  # This actually is used to set the sample frequency
+        edf_out.writeAnnotation(0, -1, "Recording starts")
         # Edit headers to make them compliant with edf files
         for header in headers:
             header["physical_max"] = int(header["physical_max"])
@@ -829,6 +868,10 @@ def create_epoch_EDF(edf_file, timestamp_init, n_val, out_path, processes):
 
         edf_out.setSignalHeaders(headers)
         edf_out.writeSamples(channel_data)
+        # Change start date
+        delta = datetime.timedelta(seconds=t_0)
+        # print(f'Delta {delta}, Old date: {start_date}, New date: {start_date + delta} \n')
+        new_date = start_date + delta
         # Write annotations
         edf_out.writeAnnotation(t[t_init_id] - t_0, -1, f"Epoch starts.")
         edf_out.writeAnnotation(
@@ -838,6 +881,10 @@ def create_epoch_EDF(edf_file, timestamp_init, n_val, out_path, processes):
         # we want the final of the last datarecord!
         # Deallocate space in memory
         del t
+        # print('set new date\n', flush=True)
+        edf_out.setStartdatetime(new_date)
+        edf_out.update_header()
+        print(edf_out.recording_start_time)
         edf_out.close()
     except Exception:
         traceback.print_exc()

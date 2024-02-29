@@ -70,7 +70,7 @@ class cleanSEEG:
         self,
         n_samples=None,
         event_dur=None,
-        event_label=None,
+        event_start=None,
         out_root=None,
         out_files=None,
         tmpdir=None,
@@ -87,30 +87,41 @@ class cleanSEEG:
         assert n_samples or event_dur
         # Find indexes from events
         f = pyedflib.EdfReader(self.edf_path)
+        # Number of samples in edf
+        N = f.getNSamples()[0]
         # Get number of samples if not defined
         # Sampling rate:
         srate = f.getSampleFrequencies()[0] / f.datarecord_duration
         if not n_samples:
             # Get number of samples based on event duration
-            n_samples = event_dur * srate
+            n_samples = int(event_dur * srate)
+        # Check than n_samples is not bigger than N
+        if n_samples > N:
+            print('Number of samples bigger than number of points in file, changing to the max.\n', flush=True)
+            n_samples = N
         # Adjust n_samples depending on the datarecord duration and the number of samples in file
-        # Number of samples in edf
-        N = f.getNSamples()[0]
-        n_blocks = N / f.getSampleFrequencies()[0]
         remainder = n_samples % f.getSampleFrequencies()[0]
         if remainder != 0:
             n_samples += f.getSampleFrequencies()[0] - remainder
         # Find timestamps
-        if event_label:
-            id = [
-                value[0]
-                for value in enumerate(f.readAnnotations()[2])
-                if re.match(event_label, value[1], re.IGNORECASE)
-            ]
-            # Create df with annotations
-            onset_list = f.readAnnotations()[0]
-            # Find time stamps where the 'awake trigger' event is happening
-            time_stamps_init = onset_list[id]
+        if event_start is not None:
+            # Two possibilities: label or index
+            if isinstance(event_start, int):
+                t = np.arange(0, N) / srate
+                time_stamps_init = t[event_start]
+            else:    
+                id = [
+                    value[0]
+                    for value in enumerate(f.readAnnotations()[2])
+                    if re.match(event_start, value[1], re.IGNORECASE)
+                ]
+                # Create df with annotations
+                onset_list = f.readAnnotations()[0]
+                # Find time stamps where the 'awake trigger' event is happening
+                time_stamps_init = onset_list[id]
+            # Make sure it's a list
+            if not hasattr(time_stamps_init, '__iter__'):
+                time_stamps_init = [time_stamps_init]
         else:
             t = np.arange(0, N) / srate
             time_stamps_init = t[::n_samples]
@@ -129,8 +140,7 @@ class cleanSEEG:
         # Extract entities from input path
         entities = bids.layout.parse_file_entities(self.edf_path)
         # Combine 'extension' with 'suffix' and delete the first one
-        if snakemake:
-            entities["suffix"] = entities["suffix"] + "_tmp" + entities["extension"]
+        entities["suffix"] = entities["suffix"] + entities["extension"]
         del entities["extension"]
         # Add 'task'
         entities["rec"] = "clip"

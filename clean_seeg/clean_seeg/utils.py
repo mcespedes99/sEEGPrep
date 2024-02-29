@@ -97,7 +97,7 @@ def downsample_signal(signal, orig_srate, target_srate):
     return signal_dsG, downsampledSrate
 
 
-def get_chn_positions(chn_csv_path, electrodes_edf, tfm_list=[], label="name"):
+def get_chn_positions(chn_csv_path, electrodes_edf, tfm_list=[], col_label="name"):
     """Creates dictionary with the position of each electrode.
     Parameters
     ----------
@@ -112,7 +112,7 @@ def get_chn_positions(chn_csv_path, electrodes_edf, tfm_list=[], label="name"):
     elec_pos = pd.read_csv(chn_csv_path, sep="\t")
     chn_pos = {}
     for i in np.arange(len(elec_pos)):
-        label = elec_pos.loc[[i], [label]].values[0][0]
+        label = elec_pos.loc[[i], [col_label]].values[0][0]
         if label in electrodes_edf:
             pos = elec_pos.loc[[i], ["x", "y", "z"]].values[0]
             for tfm, inv_bool in tfm_list:
@@ -397,7 +397,7 @@ def square_filt(x, T, nIterations=1):
         B = np.concatenate((np.ones(integ), [frac])) / T
         for k in np.arange(1, nIterations):
             B = np.convolve(B, B)
-            print("aqui")
+            # print("aqui")
         x = scipy.signal.filtfilt(B, 1, x, axis=0)  # lfilter
 
     # restore DC
