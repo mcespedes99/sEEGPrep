@@ -66,42 +66,36 @@ def apply_bipolar_criteria(df_bipolar, bipolar_list, processes):
 
 # Function to extract position of bipolar channels
 def bipolar_info(id, dict_key, channels_dict, elec_pos, df_cols):
-    # Only create bipolar channels with the closest or second closest electrode
-    if (
-        abs(int(channels_dict[dict_key][id]) - int(channels_dict[dict_key][id + 1]))
-        <= 2
-    ):
-        # Bipolar channel label
-        bipolar_chn = (
-            dict_key
-            + channels_dict[dict_key][id]
-            + "-"
-            + channels_dict[dict_key][id + 1]
-        )
-        # Channels' labels
-        chn1_label = dict_key + channels_dict[dict_key][id]
-        chn2_label = dict_key + channels_dict[dict_key][id + 1]
-        # Extract positions
-        inf_chn1 = elec_pos.loc[elec_pos[df_cols["label"]] == chn1_label]
-        inf_chn2 = elec_pos.loc[elec_pos[df_cols["label"]] == chn2_label]
-        # print(inf_chn1)
-        data = {
-            "type": inf_chn1[df_cols["type"]].values[0],
-            "group": inf_chn1[df_cols["group"]].values[0],
-            "label": bipolar_chn,
-            "x_init": inf_chn1[df_cols["x"]].values[0],
-            "x_end": inf_chn2[df_cols["x"]].values[0],
-            "y_init": inf_chn1[df_cols["y"]].values[0],
-            "y_end": inf_chn2[df_cols["y"]].values[0],
-            "z_init": inf_chn1[df_cols["z"]].values[0],
-            "z_end": inf_chn2[df_cols["z"]].values[0],
-        }
-        return data
-    return None
+    # Bipolar channel label
+    bipolar_chn = (
+        dict_key
+        + channels_dict[dict_key][id]
+        + "-"
+        + channels_dict[dict_key][id + 1]
+    )
+    # Channels' labels
+    chn1_label = dict_key + channels_dict[dict_key][id]
+    chn2_label = dict_key + channels_dict[dict_key][id + 1]
+    # Extract positions
+    inf_chn1 = elec_pos.loc[elec_pos[df_cols["label"]] == chn1_label]
+    inf_chn2 = elec_pos.loc[elec_pos[df_cols["label"]] == chn2_label]
+    # print(inf_chn1)
+    data = {
+        "type": inf_chn1[df_cols["type"]].values[0],
+        "group": inf_chn1[df_cols["group"]].values[0],
+        "label": bipolar_chn,
+        "x_init": inf_chn1[df_cols["x"]].values[0],
+        "x_end": inf_chn2[df_cols["x"]].values[0],
+        "y_init": inf_chn1[df_cols["y"]].values[0],
+        "y_end": inf_chn2[df_cols["y"]].values[0],
+        "z_init": inf_chn1[df_cols["z"]].values[0],
+        "z_end": inf_chn2[df_cols["z"]].values[0],
+    }
+    return data
 
 
 # Function to create a bipolar channel list from
-def create_bipolars(electrodes_df, electrodes_edf, processes, df_cols=None):
+def create_bipolars(electrodes_df, electrodes_edf, processes, df_cols=None, compare_edf=True):
     # df_cols (dict) = {type_record, label, x, y, z, group}
     # the dict can be in any order. The df will have the structure given
     # by the dict
@@ -120,7 +114,7 @@ def create_bipolars(electrodes_df, electrodes_edf, processes, df_cols=None):
     pattern2 = r"([A-Z]+[-]*)(\d+)$"  # for electrodes like 'LOpS10'
     # Extract channels info
     for electrode in electrodes_df[df_cols["label"]].values:
-        if electrode in electrodes_edf:
+        if not compare_edf or (compare_edf and (electrode in electrodes_edf)):
             match = re.match(pattern1, electrode, re.IGNORECASE)
             if not match:
                 match = re.match(pattern2, electrode, re.IGNORECASE)
@@ -157,7 +151,21 @@ def create_bipolars(electrodes_df, electrodes_edf, processes, df_cols=None):
     bipolar_list = [element for element in bipolar_list if element is not None]
     # Convert dict to DataFrame
     bipolar_elec = pd.DataFrame(bipolar_info_dicts)
-    return bipolar_list, bipolar_elec
+    # Update df_cols
+    df_cols_keys = [
+                "type",
+                "group",
+                "label",
+                "x_init",
+                "x_end",
+                "y_init",
+                "y_end",
+                "z_init",
+                "z_end",
+            ]
+    df_cols_vals = bipolar_elec.columns.values.tolist()
+    df_cols = dict(zip(df_cols_keys, df_cols_vals))
+    return bipolar_list, bipolar_elec, df_cols
 
 
 # Function to extract info from each channel
@@ -326,7 +334,7 @@ def create_line_mask(point1, point2, shape):
 
 
 # Function to get electrode region based on volume mask
-def mask_and_get_region(parc, elec_df, df_cols, tfm_list, label_map):
+def mask_and_get_region_bipolar(parc, elec_df, df_cols, tfm_list, label_map):
     # Load data of parcellations
     data_parc = np.asarray(parc.dataobj)
     # Coordinates in MRI RAS
@@ -340,40 +348,9 @@ def mask_and_get_region(parc, elec_df, df_cols, tfm_list, label_map):
     chn_names = elec_df[df_cols["label"]].values
     # print(mri_ras_mm)
     # Apply transforms
-    for tfm, inv_bool in tfm_list:
-        if type(tfm) == str:
-            if tfm.endswith("txt"):
-                tfm = readRegMatrix(tfm)
-                if inv_bool:
-                    tfm = np.linalg.inv(tfm)
-                mri_ras_mm_init = mne.transforms.apply_trans(tfm, mri_ras_mm_init)
-                mri_ras_mm_end = mne.transforms.apply_trans(tfm, mri_ras_mm_end)
-            elif tfm.endswith("nii.gz"):
-                # reads the transform and casts the output compaitble format
-                transform_image = sitk.ReadImage(tfm)
-                transform_image = sitk.Cast(transform_image, sitk.sitkVectorFloat64)
-                # load it as a transform
-                identity_transform = sitk.Transform(transform_image)
-                # Convert points from RAS to LPS
-                mri_mni_lps_init = mri_ras_mm_init * np.array([-1, -1, 1])
-                mri_mni_lps_end = mri_ras_mm_end * np.array([-1, -1, 1])
-                # Transform
-                for point_id in range(mri_mni_lps_init.shape[0]):
-                    mri_mni_lps_init[point_id, :] = np.array(
-                        identity_transform.TransformPoint(mri_mni_lps_init[point_id, :])
-                    )
-                    mri_mni_lps_end[point_id, :] = np.array(
-                        identity_transform.TransformPoint(mri_mni_lps_end[point_id, :])
-                    )
-                # Convert from LPS back to RAS
-                mri_ras_mm_init = mri_mni_lps_init * np.array([-1, -1, 1])
-                mri_ras_mm_end = mri_mni_lps_end * np.array([-1, -1, 1])
+    mri_ras_mm_init = transform_coordinates(mri_ras_mm_init, tfm_list)
+    mri_ras_mm_end = transform_coordinates(mri_ras_mm_end, tfm_list)
 
-        else:
-            if inv_bool:
-                tfm = np.linalg.inv(tfm)
-            mri_ras_mm_init = mne.transforms.apply_trans(tfm, mri_ras_mm_init)
-            mri_ras_mm_end = mne.transforms.apply_trans(tfm, mri_ras_mm_end)
     # To voxels
     inv_affine = np.linalg.inv(parc.affine)
     # here's where the interpolation should be performed!!
@@ -389,6 +366,7 @@ def mask_and_get_region(parc, elec_df, df_cols, tfm_list, label_map):
     # Assign unknown in this case.
     id = []
     regions_per_chn = dict()
+    total_mask = np.zeros(data_parc.shape, dtype=bool)
     for idx in range(vox_init.shape[0]):
         # If outside of the cropped space:
         if (
@@ -414,6 +392,8 @@ def mask_and_get_region(parc, elec_df, df_cols, tfm_list, label_map):
             dilated = dilation(mask, ball(1))
             # Get masked data
             regions_chn = data_parc[dilated]
+            # Save it
+            total_mask += dilated
             # Get frequency of each region for this channel
             freq_labels = []
             for label in np.unique(regions_chn):
@@ -434,7 +414,77 @@ def mask_and_get_region(parc, elec_df, df_cols, tfm_list, label_map):
                 tmp_dict[label_map.loc[label_idx, "name"]] = freq
             regions_per_chn[chn_names[idx]] = tmp_dict
     id = np.array(id)
-    return id, regions_per_chn
+    return id, regions_per_chn, total_mask
+
+def mask_and_get_region_unipolar(parc, elec_df, df_cols, tfm_list, label_map, mask_out_path=None):
+    # Load data of parcellations
+    data_parc = np.asarray(parc.dataobj)
+    # Coordinates in MRI RAS
+    mri_ras_mm = elec_df[
+        [df_cols["x"], df_cols["y"], df_cols["z"]]
+    ].values
+    # Get channel names to build json file
+    chn_names = elec_df[df_cols["label"]].values
+    # print(mri_ras_mm)
+    # Apply transforms
+    mri_ras_mm = transform_coordinates(mri_ras_mm, tfm_list)
+
+    # To voxels
+    inv_affine = np.linalg.inv(parc.affine)
+    # here's where the interpolation should be performed!!
+    vox = np.round(
+        (mne.transforms.apply_trans(inv_affine, mri_ras_mm))
+    ).astype(int)
+    # print(vox)
+    # Try to get all the indexes
+    # For hippunfold, the space is cropped, so it might be the case that one of the contacts is outside of the cropped space.
+    # Assign unknown in this case.
+    id = []
+    regions_per_chn = dict()
+    total_mask = np.zeros(data_parc.shape, dtype=bool)
+    for idx in range(vox.shape[0]):
+        # If outside of the cropped space:
+        if (
+            (vox[:, 0] >= data_parc.shape[0]).any()
+            or (vox[:, 1] >= data_parc.shape[1]).any()
+            or (vox[:, 2] >= data_parc.shape[2]).any()
+            or (vox < 0).any()  # If any of the elements is pointing to a 'negative index'
+        ):
+            id.append(0)
+            # Update dict
+            regions_per_chn[chn_names[idx]] = {"Unknown": 1}
+        else:
+            # Calculate based on volume
+            # Create an empty mask with the specified shape
+            mask = np.zeros(data_parc.shape, dtype=bool)
+            mask[tuple(vox[idx, :].tolist())]=True
+            # Dilate mask
+            dilated = dilation(mask, ball(1))
+            # Save it
+            total_mask += dilated
+            # Get masked data
+            regions_chn = data_parc[dilated]
+            # Get frequency of each region for this channel
+            freq_labels = []
+            for label in np.unique(regions_chn):
+                freq_labels.append(
+                    (
+                        label,
+                        np.round(
+                            len(regions_chn[regions_chn == label]) / len(regions_chn), 2
+                        ),
+                    )
+                )
+            # Sort it and choose first
+            freq_labels = sorted(freq_labels, key=lambda x: x[1], reverse=True)
+            id.append(int(freq_labels[0][0]))
+            # Save into dict
+            tmp_dict = dict()
+            for label_idx, freq in freq_labels:
+                tmp_dict[label_map.loc[label_idx, "name"]] = freq
+            regions_per_chn[chn_names[idx]] = tmp_dict
+    id = np.array(id)
+    return id, regions_per_chn, total_mask
 
 def transform_coordinates(mri_ras_mm, tfm_list):
     # mri_ras_coords: Array (3xn)
@@ -469,45 +519,28 @@ def transform_coordinates(mri_ras_mm, tfm_list):
 
 # Function to get label id based on parcellation obj
 # TODO: test function in jupyter notebook
-def get_electrodes_id(parc, elec_df, df_cols, tfm_list):
+def get_electrodes_id(parc, elec_df, df_cols, tfm_list, reference):
+    assert reference in ['bipolar', 'unipolar']
     # Load data of parcellations
     data_parc = np.asarray(parc.dataobj)
-    # Coordinates in MRI RAS
-    mri_ras_mm = elec_df[[df_cols["x"], df_cols["y"], df_cols["z"]]].values
-    # print(mri_ras_mm)
-    # Apply transforms
-    for tfm, inv_bool in tfm_list:
-        if type(tfm) == str:
-            if tfm.endswith("txt"):
-                tfm = readRegMatrix(tfm)
-                if inv_bool:
-                    tfm = np.linalg.inv(tfm)
-                mri_ras_mm = mne.transforms.apply_trans(tfm, mri_ras_mm)
-            elif tfm.endswith("nii.gz"):
-                # reads the transform and casts the output compaitble format
-                transform_image = sitk.ReadImage(tfm)
-                transform_image = sitk.Cast(transform_image, sitk.sitkVectorFloat64)
-                # load it as a transform
-                identity_transform = sitk.Transform(transform_image)
-                # Convert points from RAS to LPS
-                mri_mni_lps = mri_ras_mm * np.array([-1, -1, 1])
-                # Transform
-                for point_id in range(mri_mni_lps.shape[0]):
-                    mri_mni_lps[point_id, :] = np.array(
-                        identity_transform.TransformPoint(mri_mni_lps[point_id, :])
-                    )
-                # Convert from LPS back to RAS
-                mri_ras_mm = mri_mni_lps * np.array([-1, -1, 1])
-        else:
-            if inv_bool:
-                tfm = np.linalg.inv(tfm)
-            mri_ras_mm = mne.transforms.apply_trans(tfm, mri_ras_mm)
-    # Transform from contrast mri ras to non-contrast MRI ras
-    # mri_ras_mm = mne.transforms.apply_trans(non_cont_to_cont_tf, mri_ras_mm)
-    # Update position of electrodes in df
-    elec_df[df_cols["x"]] = mri_ras_mm[:, 0]
-    elec_df[df_cols["y"]] = mri_ras_mm[:, 1]
-    elec_df[df_cols["z"]] = mri_ras_mm[:, 2]
+    if reference == 'unipolar':
+        # Coordinates in MRI RAS
+        mri_ras_mm = elec_df[[df_cols["x"], df_cols["y"], df_cols["z"]]].values
+        # print(mri_ras_mm)
+        # Apply transforms
+        mri_ras_mm = transform_coordinates(mri_ras_mm, tfm_list)
+    else:
+         # Coordinates in MRI RAS
+        mri_ras_mm_init = elec_df[
+            [df_cols["x_init"], df_cols["y_init"], df_cols["z_init"]]
+        ].values
+        mri_ras_mm_end = elec_df[
+            [df_cols["x_end"], df_cols["y_end"], df_cols["z_end"]]
+        ].values
+        mri_ras_mm = (mri_ras_mm_init+mri_ras_mm_end)/2
+        # print(mri_ras_mm)
+        # Apply transforms
+        mri_ras_mm = transform_coordinates(mri_ras_mm, tfm_list)
     # print(mri_ras_mm)
     # To voxels
     inv_affine = np.linalg.inv(parc.affine)
@@ -539,19 +572,25 @@ def get_electrodes_id(parc, elec_df, df_cols, tfm_list):
     # Get the indexes more efficiently
     else:
         id = data_parc[vox[:, 0], vox[:, 1], vox[:, 2]]
-    return id, elec_df
+    return id
 
 
 # Function to get rgb values for each contact
-def get_label_rgb(parc, elec_df, tfm_list, label_map, df_cols, vol_version):
-    if vol_version:
-        id, regions_per_chn = mask_and_get_region(
+def get_label_rgb(parc, elec_df, tfm_list, label_map, df_cols, reference, vol_version=False):
+    assert reference in ['bipolar', 'unipolar']
+    if vol_version and reference=='bipolar':
+        id, regions_per_chn, mask = mask_and_get_region_bipolar(
+            parc, elec_df, df_cols, tfm_list, label_map
+        )
+    elif vol_version and reference=='unipolar':
+        id, regions_per_chn, mask = mask_and_get_region_unipolar(
             parc, elec_df, df_cols, tfm_list, label_map
         )
     else:
-        # vox, data_parc = ras2vox(parc, elec_df, non_cont_to_cont_tf)
-        id, elec_df = get_electrodes_id(parc, elec_df, df_cols, tfm_list)
+        id = get_electrodes_id(parc, elec_df, df_cols, tfm_list, reference)
         regions_per_chn = None
+        mask = None
+
     print(label_map)
     print(id)
     print(regions_per_chn)
@@ -559,7 +598,7 @@ def get_label_rgb(parc, elec_df, tfm_list, label_map, df_cols, vol_version):
     vals = np.c_[id, vals]
     vals = pd.DataFrame(data=vals, columns=["region ID", "region name", "r", "g", "b"])
     vals = pd.concat([elec_df, vals], axis=1)
-    return vals, regions_per_chn
+    return vals, regions_per_chn, mask
 
 
 # Function to read matrix
@@ -570,32 +609,36 @@ def readRegMatrix(trsfPath):
 
 # Function to create tsv with bipolar channels info
 def extract_location(
-    parc_path, chn_info_df, df_cols, tfm_list, colortable_file, vol_version=False
+    parc_path, chn_info_df, df_cols, tfm_list, colortable_file, reference, vol_version=False, mask_out_path = None
 ):
     import os
+    assert reference in ['bipolar', 'unipolar']
 
     # Load labels from LUT file
     labels = get_colors_labels(colortable_file)
     # Load parcellation file
     parc_obj = nb.load(parc_path)
     # Create df
-    df, regions_per_chn = get_label_rgb(
-        parc_obj, chn_info_df, tfm_list, labels, df_cols, vol_version
+    df, regions_per_chn , mask= get_label_rgb(
+        parc_obj, chn_info_df, tfm_list, labels, df_cols, reference, vol_version
     )
     # if not os.path.exists(out_tsv_name):
     #     df.to_csv(out_tsv_name, sep = '\t')
+    if mask is not None and mask_out_path is not None:
+        nb_img = nb.Nifti1Image(mask, parc_obj.affine, parc_obj.header)
+        nb.save(nb_img, mask_out_path)
     return df, regions_per_chn
 
 
 # Function to extract useful information from csv file
 def get_chn_info(
-    csv_file, electrodes_edf, df_cols=None, vol_version=False
+    electrodes_df, electrodes_edf, reference, df_cols=None
 ):  # , conf = 'unipolar'
-    df = pd.read_csv(csv_file, sep="\t")
+    assert reference in ['bipolar', 'unipolar']
     # df_cols (dict) = {type_record, label, x, y, z, group}
     # the dict can be in any order. The df will have the structure given
     # by the dict
-    if df_cols == None and not vol_version:
+    if df_cols == None and reference=='unipolar':
         df_cols = {
             "type": "type",
             "label": "label",
@@ -604,7 +647,7 @@ def get_chn_info(
             "z": "z",
             "group": "group",
         }
-    elif df_cols == None and vol_version:
+    elif df_cols == None: # Bipolar case 
         df_cols = {
             "type": "type",
             "group": "group",
@@ -616,15 +659,14 @@ def get_chn_info(
             "z_init": "z_init",
             "z_end": "z_end",
         }
-    # print(list(df_cols.values()))
-    important_data = df[list(df_cols.values())]
+    important_data = electrodes_df[list(df_cols.values())]
     important_data.reset_index()  # make sure indexes pair with number of rows
-    elec_df = pd.DataFrame(columns=list(df_cols.keys()))
+    elec_df = pd.DataFrame(columns=list(df_cols.values()))
     for index in range(len(important_data)):
         if important_data.loc[index, df_cols["label"]] in electrodes_edf:
             tmp_df = pd.DataFrame(
-                [important_data.loc[index, list(df_cols.keys())].values],
-                columns=list(df_cols.keys()),
+                [important_data.loc[index, list(df_cols.values())].values],
+                columns=list(df_cols.values()),
             )
             elec_df = pd.concat([elec_df, tmp_df], axis=0)
     del tmp_df

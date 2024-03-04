@@ -15,10 +15,13 @@ def get_tmpdir():
         return None
 
 def get_time(wildcards, number_clips):
-    subj_id = f'subj_{wildcards.subject}'
-    ses_id = f'ses_{wildcards.session}'
+    identifier = expand(
+                inputs.path['annotations'],
+                zip,
+                **wildcards
+            )
     # print(subj_id, ses_id, number_clips[subj_id][ses_id])
-    return number_clips[subj_id][ses_id]*180
+    return number_clips[identifier[0]]*180
 
 # Define output folder for edf file
 def out_dir_epochs():

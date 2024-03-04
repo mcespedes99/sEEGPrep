@@ -38,7 +38,7 @@ def get_tf(wildcards):
 rule filter_data:
     input:
         edf = filter_inputs(),
-        tsv = inputs.path['seega_tsv'], # Turned off for now
+        tsv = inputs.path['electrodes_tsv'], # Turned off for now
         # Other parameters
         # t1 = 'derivatives/freesurfer/sub-{subject}/mri/T1.mgz',
     params:

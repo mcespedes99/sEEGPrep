@@ -18,6 +18,7 @@ from .data_manager import (
     create_epoch_EDF,
 )
 import logging
+import pandas as pd
 
 
 class cleanSEEG:
@@ -74,7 +75,6 @@ class cleanSEEG:
         out_root=None,
         out_files=None,
         tmpdir=None,
-        snakemake=False,
     ):
         import pyedflib
         import shutil
@@ -188,7 +188,6 @@ class cleanSEEG:
         import os
         import pyedflib
         import numpy as np
-        import pandas as pd
 
         # Manage some errors:
         if write_tsv and out_tsv_path == None:
@@ -206,7 +205,7 @@ class cleanSEEG:
         elec_edf = edf.getSignalLabels()
         edf.close()
         # Create bipolar combinations
-        bipolar_channels, bipolar_info_df = create_bipolars(
+        bipolar_channels, bipolar_info_df, _ = create_bipolars(
             elec_pos, elec_edf, self.processes, df_cols=df_cols
         )
         # Save values in the class
@@ -232,20 +231,23 @@ class cleanSEEG:
         self,
         aparc_aseg_path,
         colortable_file,  # colortable has to be a tsv with at least index, name
+        reference, # 
         use_reref=True,
         write_tsv=False,
         out_tsv_path=None,
         df_cols=None,
-        use_clean=False,
         discard_wm_un=False,
         write_edf=False,
         out_edf_path=None,
         vol_version=False,
         json_out=None,
+        mask_out=None # to save mask
     ):
         import os
         import pyedflib
         import json
+
+        assert reference in ['bipolar', 'unipolar']
 
         # Manage exception
         if self.chn_csv_path == None:
@@ -279,17 +281,26 @@ class cleanSEEG:
             df_cols_vals = chn_info_df.columns.values.tolist()
             df_cols = dict(zip(df_cols_keys, df_cols_vals))
             chn_list = self.reref_chn_list
-        # Extract electrodes information if using not rereference results
+        # Extract electrodes information if not using rereference results
         else:
             logging.info(f"Extracting channel positions from {self.chn_csv_path}")
+            # Extract info about electrodes positions
+            elec_pos = pd.read_csv(self.chn_csv_path, sep="\t")
             # First extract list of channels present in edf file
             edf = pyedflib.EdfReader(self.edf_path)
             elec_edf = edf.getSignalLabels()
             edf.close()
+            # Check if needs to preprocess electrodes.tsv file
+            if reference=='bipolar':
+                # Needs to convert electrodes df to bipolar
+                # Create bipolar combinations
+                _, elec_pos, df_cols = create_bipolars(
+                    elec_pos, elec_edf, self.processes, df_cols=df_cols, compare_edf=False
+                )
+
             chn_info_df, chn_list, df_cols = get_chn_info(
-                self.chn_csv_path, elec_edf, df_cols=df_cols, vol_version=vol_version
+                elec_pos, elec_edf, reference, df_cols=df_cols
             )  # , conf=conf
-        # TODO: verify format of df_cols based on "vol_version"
         # Create tsv file with information about location of the channels
         df_location, regions_per_chn = extract_location(
             aparc_aseg_path,
@@ -297,7 +308,9 @@ class cleanSEEG:
             df_cols,
             self.tfm,
             colortable_file,
+            reference,
             vol_version,
+            mask_out
         )
         if write_tsv:
             if os.path.exists(out_tsv_path):

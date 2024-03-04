@@ -33,7 +33,7 @@ rule rereference:
     input:
         edf = reref_inputs(),
         # Other parameters
-        tsv = inputs.path['seega_tsv'],
+        tsv = inputs.path['electrodes_tsv'],
     group:
         "subj"
     output:

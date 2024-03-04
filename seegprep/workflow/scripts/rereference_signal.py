@@ -28,14 +28,6 @@ def main():
         dict_keys = ['type','label','x','y','z','group']
         dict_vals = snakemake.config['tsv_cols']
         df_cols = dict(zip(dict_keys, dict_vals))
-        # df_cols = { # TODO: change to parameter!
-        #         'type': 'type',
-        #         'label': 'label',
-        #         'x': 'x',
-        #         'y': 'y',
-        #         'z': 'z',
-        #         'group': 'orig_group'
-        #     }
         # Apply rereferencing
         seegTF.rereference(out_edf, write_tsv = True, out_tsv_path = out_tsv, df_cols = df_cols)
 
