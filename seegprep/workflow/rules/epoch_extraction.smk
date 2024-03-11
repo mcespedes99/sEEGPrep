@@ -16,7 +16,7 @@ def get_tmpdir():
 
 def get_time(wildcards, number_clips):
     identifier = expand(
-                inputs.path['annotations'],
+                inputs.path['events'],
                 zip,
                 **wildcards
             )
@@ -35,16 +35,23 @@ def out_dir_epochs():
 
 rule epochs:
     input: 
-        edf = inputs.path['ieeg'],
-        annot = inputs.path['annotations'],
+        edf = inputs.path['edf'],
+        annot = inputs.path['events'],
     output:
         tmp_file = temp(
                         bids(
                             root=out_dir_epochs(),
                             datatype='ieeg',
                             suffix='run.txt',
-                            **inputs.wildcards['ieeg']
+                            **inputs.wildcards['edf']
                             )
+                        ),
+        report_file = bids(
+                        root=out_dir_epochs(),
+                        datatype='ieeg',
+                        suffix='report.tsv',
+                        rec='clip',
+                        **inputs.wildcards['edf']
                         )
     # This can be changed using --set-threads epochs=N. It acts as a balance between subject and channel parallelization.
     threads: 16
@@ -59,13 +66,13 @@ rule epochs:
        bids(
            root='benchmark',
            suffix='benchmarkEpoch.txt',
-           **inputs.wildcards['ieeg']
+           **inputs.wildcards['edf']
        ),
     log:
         bids(
             root='logs',
             suffix='epochs.log',
-            **inputs.wildcards['ieeg']
+            **inputs.wildcards['edf']
         ),
     script: join(workflow.basedir,'scripts/epochs.py')
 

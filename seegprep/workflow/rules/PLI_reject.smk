@@ -16,19 +16,19 @@ def PLI_inputs():
     # Else if filter is called
     elif config['filter']:
         #print('filter before regionsID')
-        return rules.filter_data.output.out_edf, inputs.path['seega_tsv']
+        return rules.filter_data.output.out_edf, inputs.path['channels']
     # Else if downsample is called
     elif config['downsample']:
         #print('filter before regionsID')
-        return rules.downsample.output.out_edf, inputs.path['seega_tsv']
+        return rules.downsample.output.out_edf, inputs.path['channels']
     # Else if filter is executed after epoch extraction
     elif config['epoch']:
         # print('epoch before PLI')
-        return rules.get_epoch_files.output.out_edf, inputs.path['seega_tsv']
+        return rules.get_epoch_files.output.out_edf, inputs.path['channels']
     # Else if regionsID is called but not any of the previous rules
     elif config['PLI_rej']:
         #print('PLI_rej is first')
-        return inputs.path['ieeg'], inputs.path['seega_tsv']
+        return inputs.path['edf'], inputs.path['channels']
     else: # Default: run_all
         #print('reref before regionsID (run all)')
         return rules.rereference.output.out_edf, rules.rereference.output.out_tsv
@@ -46,6 +46,13 @@ rule PLI_reject:
                         root=out_dir_PLI(),
                         datatype='ieeg',
                         suffix='ieeg.edf',
+                        rec='PLIreject',
+                        **out_edf_wc
+                ),
+        report_json = bids(
+                        root='work',
+                        datatype='ieeg',
+                        suffix='report.json',
                         rec='PLIreject',
                         **out_edf_wc
                 ),

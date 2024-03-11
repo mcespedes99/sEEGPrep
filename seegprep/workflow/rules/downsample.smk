@@ -17,7 +17,7 @@ def dn_inputs():
     # Else if downsample is the first step to execute
     elif config['downsample']:
         #print('downsample is first')
-        return inputs.path['ieeg']
+        return inputs.path['edf']
     # run_all by default
     else:
         #print('default filter')
@@ -28,6 +28,7 @@ def dn_inputs():
 rule downsample:
     input: 
         edf = dn_inputs(),
+        chn_csv = inputs.path['channels'],
     group:
         "subj"
     output:
@@ -37,7 +38,14 @@ rule downsample:
                         suffix='ieeg.edf',
                         rec='dn',
                         **out_edf_wc
-                  )
+                  ),
+        report_file = bids(
+                        root='work',
+                        datatype='ieeg',
+                        suffix='report.tsv',
+                        rec='dn',
+                        **out_edf_wc
+                        )
     resources:
         mem_mb = 16000,
     threads: 16

@@ -19,7 +19,7 @@ def filter_inputs():
     # Else if filter is the first step to execute
     elif config['filter']:
         #print('filter is first')
-        return inputs.path['ieeg']
+        return inputs.path['edf']
     # run_all by default
     else:
         #print('default filter')
@@ -38,21 +38,9 @@ def get_tf(wildcards):
 rule filter_data:
     input:
         edf = filter_inputs(),
-        tsv = inputs.path['electrodes_tsv'], # Turned off for now
+        chn_tsv = inputs.path['channels'],
         # Other parameters
         # t1 = 'derivatives/freesurfer/sub-{subject}/mri/T1.mgz',
-    params:
-        # freesurf_dir = config['freesurf_dir'],
-        # freesurf_patient = config['freesurf_patient_label'],
-        # tf = get_tf,
-        out_tsv = join(config['output_dir'],
-                    bids(
-                        root='bids',
-                        datatype='ieeg',
-                        suffix='noisy_data.tsv',
-                        rec='denoise',
-                        **out_edf_wc
-                    )),
     group:
         "subj"
     output:
@@ -60,6 +48,20 @@ rule filter_data:
                         root=out_dir_filt(),
                         datatype='ieeg',
                         suffix='ieeg.edf',
+                        rec='denoise',
+                        **out_edf_wc
+                ),
+        report_df = bids(
+                        root='work',
+                        datatype='ieeg',
+                        suffix='report.tsv',
+                        rec='denoise',
+                        **out_edf_wc
+                ),
+        report_json = bids(
+                        root='work',
+                        datatype='ieeg',
+                        suffix='report.json',
                         rec='denoise',
                         **out_edf_wc
                 ),

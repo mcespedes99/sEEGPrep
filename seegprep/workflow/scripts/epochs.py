@@ -3,18 +3,14 @@ import sys
 import logging
 import os
 
-# Adding path to import cleanSEEG
-path = str(Path(Path(__file__).parent.absolute()).parent.parent.parent.absolute())
-# print(path)
-sys.path.append(path)
-
 # Import cleanSEEG
 from clean_seeg import cleanSEEG
 
 def main():
     edf = snakemake.input.edf
     processes = int(snakemake.threads)
-    tmp_file = str(snakemake.output.tmp_file)
+    tmp_file = snakemake.output.tmp_file
+    report = snakemake.output.report_file
     tmpdir = snakemake.resources.tmpdir
     event = snakemake.config['event']
     LOG_FILENAME = snakemake.log[0]
@@ -42,14 +38,16 @@ def main():
                            processes = processes)
 
         # Extract epochs
-        # Extract epoch
-        seegTF.extract_epochs(
-            n_samples = n_samples,
-            event_dur = duration,
-            event_start=event_start,
-            out_root=out_dir,
-            tmpdir=tmpdir,
+        report_epochs = seegTF.extract_epochs(
+                        n_samples = n_samples,
+                        event_dur = duration,
+                        event_start=event_start,
+                        out_root=out_dir,
+                        tmpdir=tmpdir,
+                        snakemake=True,
+                        return_report=True
         )
+        report_epochs.to_csv(report, index=False, sep="\t")
     
     except:
         logging.exception('Got exception on main handler')

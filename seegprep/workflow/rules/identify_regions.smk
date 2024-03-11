@@ -2,43 +2,54 @@ import os
 # Define inputs 
 def region_id_inputs():
     # If rereference and PLI_rej are called 
-    if config['run_all'] or (config['rereference'] and config['PLI_rej']):
-        return rules.PLI_reject.output.out_edf, rules.rereference.output.out_tsv
-    # If rereference is not called but PLI_rej is called
-    elif config['PLI_rej']:
-        return rules.PLI_reject.output.out_edf, inputs.path['electrodes_tsv']
+    if config['run_all'] or config['PLI_rej']:
+        return rules.PLI_reject.output.out_edf
     # If only reref is called (without PLI_rej)
     elif config['rereference']:
-        return rules.rereference.output.out_edf, rules.rereference.output.out_tsv
+        return rules.rereference.output.out_edf
     # Else if filter is called
     elif config['filter']:
         #print('filter before regionsID')
-        return rules.filter_data.output.out_edf, inputs.path['electrodes_tsv']
+        return rules.filter_data.output.out_edf
     # Else if downsample is called
     elif config['downsample']:
         #print('filter before regionsID')
-        return rules.downsample.output.out_edf, inputs.path['electrodes_tsv']
+        return rules.downsample.output.out_edf
     # Else if filter is executed after epoch extraction
     elif config['epoch']:
-        return rules.get_epoch_files.output.out_edf, inputs.path['electrodes_tsv']
+        return rules.get_epoch_files.output.out_edf
     # Else if regionsID is called but not any of the previous rules
     elif config['regions_id']:
         #print('RegionsID is first')
-        return inputs.path['ieeg'], inputs.path['electrodes_tsv']
+        return inputs.path['edf']
     else: # Default: run_all
         #print('reref before regionsID (run all)')
-        return rules.PLI_reject.output.out_edf, rules.rereference.output.out_tsv
+        return rules.PLI_reject.output.out_edf
 
 # Rule
 rule identify_regions:
     input:
-        edf_tsv = region_id_inputs(),
+        edf = region_id_inputs(),
+        electrodes_tsv = inputs.path['electrodes'],
         parc = inputs.path['parc'],
         # tfm = rules.transform_7T_to_clinical.output.tfm, # need to create new rule to go from 7T to 1.5T
         colortable = config['colortable']
     params:
-        colortable = os.path.join(workflow.basedir, "..", config['colortable']),
-        reref_run = config['run_all'] or config['rereference'] or run_all,
+        reference_edf = 'bipolar' if config['regions_id'] else config['reference_edf'],
+        out_json = bids(
+                        root='work',
+                        datatype='ieeg',
+                        suffix='regions.json',
+                        rec='regionID',
+                        **out_edf_wc
+                ),
+        out_mask = bids(
+                        root='work',
+                        datatype='ieeg',
+                        suffix='mask.nii.gz',
+                        rec='regionID',
+                        **out_edf_wc
+                ),
     group:
         "subj"
     output:
@@ -53,6 +64,20 @@ rule identify_regions:
                         root='bids',
                         datatype='ieeg',
                         suffix='regions_native_space.tsv',
+                        rec='regionID',
+                        **out_edf_wc
+                ),
+        report_df = bids(
+                        root='work',
+                        datatype='ieeg',
+                        suffix='report.tsv',
+                        rec='regionID',
+                        **out_edf_wc
+                ),
+        report_json = bids(
+                        root='work',
+                        datatype='ieeg',
+                        suffix='report.json',
                         rec='regionID',
                         **out_edf_wc
                 ),

@@ -85,7 +85,7 @@ wildcard_constraints:  **snakebids.get_wildcard_constraints(config['pybids_input
 run_all = False
 if (not config['run_all']) and (not config['epoch']) and (not config['downsample']) \
     and (not config['filter']) and (not config['rereference']) \
-    and (not config['PLI_rej']) and (not config['regions_id']) and (not config['anat']):
+    and (not config['PLI_rej']) and (not config['regions_id']):
     run_all = True
 
 # print(inputs.zip_lists['annotations'])
@@ -93,21 +93,21 @@ if (not config['run_all']) and (not config['epoch']) and (not config['downsample
 if (config['epoch'] or config['run_all'] or run_all) and isinstance(config['event'][0], str): # If getting through annotations
     print('a')
     # Get filtered ziplist based on annotations of interest if extracting epochs
-    input_ziplist, number_clips = get_inputs(inputs.path['annotations'], **inputs.zip_lists['annotations'])
+    input_ziplist, number_clips = get_inputs(inputs.path['events'], **inputs.zip_lists['events'])
     # Add clip and rec to wildcards of outputs
-    out_edf_wc = copy.deepcopy(inputs.wildcards['ieeg'])
+    out_edf_wc = copy.deepcopy(inputs.wildcards['edf'])
     out_edf_wc['clip'] = '{clip}'
 else:
     print('b')
-    input_ziplist = inputs.zip_lists['ieeg']
+    input_ziplist = inputs.zip_lists['edf']
     # Add clip and rec to wildcards of outputs
-    out_edf_wc = copy.deepcopy(inputs.wildcards['ieeg'])
+    out_edf_wc = copy.deepcopy(inputs.wildcards['edf'])
     out_edf_wc['clip'] = '{clip}'
     # Change ziplist
-    input_ziplist = copy.deepcopy(inputs.zip_lists['annotations'])
+    input_ziplist = copy.deepcopy(inputs.zip_lists['events'])
     input_ziplist['clip'] = ['01' for i in input_ziplist[list(input_ziplist.keys())[0]]]
     # Set number of clips 
-    files = expand(inputs.path['annotations'],zip,**inputs.zip_lists['annotations'])
+    files = expand(inputs.path['events'],zip,**inputs.zip_lists['events'])
     number_clips = dict(zip(files, [1 for file in files]))
 
 #---- end snakebids boilerplate -----------------------------------------------
@@ -136,9 +136,13 @@ if config['PLI_rej'] or config['run_all'] or run_all:
 if config['regions_id'] or config['run_all'] or run_all:
     include: "rules/identify_regions.smk"
 
+# QC
+include: "rules/validation.smk"
+include: "rules/report.smk"
+
 ## Merge tsv files
-if config['regions_id'] or config['rereference'] or config['run_all'] or run_all:
-    include: "rules/merge_tsv.smk"
+# if config['regions_id'] or config['rereference'] or config['run_all'] or run_all:
+#     include: "rules/merge_tsv.smk"
 
 # print(config['processes'])
 
@@ -150,7 +154,7 @@ def define_all_inputs():
     # If regions_id is the last step
     if config['run_all'] or config['regions_id']:
         # Only use last output of the rules.merge_tsv.output.out_files, which is the one under bids
-        return rules.identify_regions.output.out_edf, rules.identify_regions.output.out_tsv#rules.merge_tsv.output.out_files[-1]
+        return rules.identify_regions.output.out_edf, rules.create_report.output.out_html#rules.merge_tsv.output.out_files[-1]
     # Power line rejection is the last step and rereference is called
     elif config['PLI_rej'] and config['rereference']:
         # print('PLI')
@@ -173,20 +177,10 @@ def define_all_inputs():
     # Else if epoch extraction is the last step
     elif config['epoch']:
         return rules.get_epoch_files.output
-    elif config['anat']:
-        dseg = bids(
-                root='work',
-                datatype="anat",
-                **inputs.wildcards['T1w'],
-                desc="synthsegcortparc",
-                suffix="dseg.nii.gz"
-                )
-        tmp_file = rules.greedy_t1_to_template.output.warped_flo[-1]
-        return dseg, tmp_file
     # Else: default case run_all
     else:
         # print('hola')
-        return rules.identify_regions.output.out_edf, rules.identify_regions.output.out_tsv
+        return rules.identify_regions.output.out_edf, rules.create_report.output.out_html
 
 rule all:
     input:

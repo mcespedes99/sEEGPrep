@@ -65,7 +65,7 @@ def apply_bipolar_criteria(df_bipolar, bipolar_list, processes):
 
 
 # Function to extract position of bipolar channels
-def bipolar_info(id, dict_key, channels_dict, elec_pos, df_cols):
+def bipolar_info(id, dict_key, channels_dict, elec_pos):
     # Bipolar channel label
     bipolar_chn = (
         dict_key
@@ -77,43 +77,29 @@ def bipolar_info(id, dict_key, channels_dict, elec_pos, df_cols):
     chn1_label = dict_key + channels_dict[dict_key][id]
     chn2_label = dict_key + channels_dict[dict_key][id + 1]
     # Extract positions
-    inf_chn1 = elec_pos.loc[elec_pos[df_cols["label"]] == chn1_label]
-    inf_chn2 = elec_pos.loc[elec_pos[df_cols["label"]] == chn2_label]
+    inf_chn1 = elec_pos.loc[elec_pos["name"] == chn1_label]
+    inf_chn2 = elec_pos.loc[elec_pos["name"] == chn2_label]
     # print(inf_chn1)
     data = {
-        "type": inf_chn1[df_cols["type"]].values[0],
-        "group": inf_chn1[df_cols["group"]].values[0],
-        "label": bipolar_chn,
-        "x_init": inf_chn1[df_cols["x"]].values[0],
-        "x_end": inf_chn2[df_cols["x"]].values[0],
-        "y_init": inf_chn1[df_cols["y"]].values[0],
-        "y_end": inf_chn2[df_cols["y"]].values[0],
-        "z_init": inf_chn1[df_cols["z"]].values[0],
-        "z_end": inf_chn2[df_cols["z"]].values[0],
+        "name": bipolar_chn,
+        "x_init": inf_chn1["x"].values[0],
+        "x_end": inf_chn2["x"].values[0],
+        "y_init": inf_chn1["y"].values[0],
+        "y_end": inf_chn2["y"].values[0],
+        "z_init": inf_chn1["z"].values[0],
+        "z_end": inf_chn2["z"].values[0],
     }
     return data
 
 
 # Function to create a bipolar channel list from
-def create_bipolars(electrodes_df, electrodes_edf, processes, df_cols=None, compare_edf=True):
-    # df_cols (dict) = {type_record, label, x, y, z, group}
-    # the dict can be in any order. The df will have the structure given
-    # by the dict
-    if df_cols == None:
-        df_cols = {
-            "type": "type",
-            "label": "label",
-            "x": "x",
-            "y": "y",
-            "z": "z",
-            "group": "group",
-        }
+def create_bipolars(electrodes_df, electrodes_edf, processes, compare_edf=True):
     channels = {}
     # Try to options of labels
     pattern1 = r"([A-Z0-9]+[-]+)(\d+)$"  # for electrodes like 'LOpS-10' or 'LOpS1-10'
     pattern2 = r"([A-Z]+[-]*)(\d+)$"  # for electrodes like 'LOpS10'
     # Extract channels info
-    for electrode in electrodes_df[df_cols["label"]].values:
+    for electrode in electrodes_df["name"].values:
         if not compare_edf or (compare_edf and (electrode in electrodes_edf)):
             match = re.match(pattern1, electrode, re.IGNORECASE)
             if not match:
@@ -140,7 +126,6 @@ def create_bipolars(electrodes_df, electrodes_edf, processes, df_cols=None, comp
                     dict_key=key,
                     channels_dict=channels,
                     elec_pos=electrodes_df,
-                    df_cols=df_cols,
                 ),
                 list(range(len(channels[key]) - 1)),
             )
@@ -151,21 +136,7 @@ def create_bipolars(electrodes_df, electrodes_edf, processes, df_cols=None, comp
     bipolar_list = [element for element in bipolar_list if element is not None]
     # Convert dict to DataFrame
     bipolar_elec = pd.DataFrame(bipolar_info_dicts)
-    # Update df_cols
-    df_cols_keys = [
-                "type",
-                "group",
-                "label",
-                "x_init",
-                "x_end",
-                "y_init",
-                "y_end",
-                "z_init",
-                "z_end",
-            ]
-    df_cols_vals = bipolar_elec.columns.values.tolist()
-    df_cols = dict(zip(df_cols_keys, df_cols_vals))
-    return bipolar_list, bipolar_elec, df_cols
+    return bipolar_list, bipolar_elec
 
 
 # Function to extract info from each channel
@@ -334,18 +305,18 @@ def create_line_mask(point1, point2, shape):
 
 
 # Function to get electrode region based on volume mask
-def mask_and_get_region_bipolar(parc, elec_df, df_cols, tfm_list, label_map):
+def mask_and_get_region_bipolar(parc, elec_df, tfm_list, label_map):
     # Load data of parcellations
     data_parc = np.asarray(parc.dataobj)
     # Coordinates in MRI RAS
     mri_ras_mm_init = elec_df[
-        [df_cols["x_init"], df_cols["y_init"], df_cols["z_init"]]
+        ["x_init", "y_init", "z_init"]
     ].values
     mri_ras_mm_end = elec_df[
-        [df_cols["x_end"], df_cols["y_end"], df_cols["z_end"]]
+        ["x_end", "y_end", "z_end"]
     ].values
     # Get channel names to build json file
-    chn_names = elec_df[df_cols["label"]].values
+    chn_names = elec_df["name"].values
     # print(mri_ras_mm)
     # Apply transforms
     mri_ras_mm_init = transform_coordinates(mri_ras_mm_init, tfm_list)
@@ -416,15 +387,15 @@ def mask_and_get_region_bipolar(parc, elec_df, df_cols, tfm_list, label_map):
     id = np.array(id)
     return id, regions_per_chn, total_mask
 
-def mask_and_get_region_unipolar(parc, elec_df, df_cols, tfm_list, label_map, mask_out_path=None):
+def mask_and_get_region_unipolar(parc, elec_df, tfm_list, label_map):
     # Load data of parcellations
     data_parc = np.asarray(parc.dataobj)
     # Coordinates in MRI RAS
     mri_ras_mm = elec_df[
-        [df_cols["x"], df_cols["y"], df_cols["z"]]
+        ["x", "y", "z"]
     ].values
     # Get channel names to build json file
-    chn_names = elec_df[df_cols["label"]].values
+    chn_names = elec_df["name"].values
     # print(mri_ras_mm)
     # Apply transforms
     mri_ras_mm = transform_coordinates(mri_ras_mm, tfm_list)
@@ -519,23 +490,23 @@ def transform_coordinates(mri_ras_mm, tfm_list):
 
 # Function to get label id based on parcellation obj
 # TODO: test function in jupyter notebook
-def get_electrodes_id(parc, elec_df, df_cols, tfm_list, reference):
+def get_electrodes_id(parc, elec_df, tfm_list, reference):
     assert reference in ['bipolar', 'unipolar']
     # Load data of parcellations
     data_parc = np.asarray(parc.dataobj)
     if reference == 'unipolar':
         # Coordinates in MRI RAS
-        mri_ras_mm = elec_df[[df_cols["x"], df_cols["y"], df_cols["z"]]].values
+        mri_ras_mm = elec_df[["x", "y", "z"]].values
         # print(mri_ras_mm)
         # Apply transforms
         mri_ras_mm = transform_coordinates(mri_ras_mm, tfm_list)
     else:
          # Coordinates in MRI RAS
         mri_ras_mm_init = elec_df[
-            [df_cols["x_init"], df_cols["y_init"], df_cols["z_init"]]
+            ["x_init", "y_init", "z_init"]
         ].values
         mri_ras_mm_end = elec_df[
-            [df_cols["x_end"], df_cols["y_end"], df_cols["z_end"]]
+            ["x_end", "y_end", "z_end"]
         ].values
         mri_ras_mm = (mri_ras_mm_init+mri_ras_mm_end)/2
         # print(mri_ras_mm)
@@ -576,18 +547,18 @@ def get_electrodes_id(parc, elec_df, df_cols, tfm_list, reference):
 
 
 # Function to get rgb values for each contact
-def get_label_rgb(parc, elec_df, tfm_list, label_map, df_cols, reference, vol_version=False):
+def get_label_rgb(parc, elec_df, tfm_list, label_map, reference, vol_version=False):
     assert reference in ['bipolar', 'unipolar']
     if vol_version and reference=='bipolar':
         id, regions_per_chn, mask = mask_and_get_region_bipolar(
-            parc, elec_df, df_cols, tfm_list, label_map
+            parc, elec_df, tfm_list, label_map
         )
     elif vol_version and reference=='unipolar':
         id, regions_per_chn, mask = mask_and_get_region_unipolar(
-            parc, elec_df, df_cols, tfm_list, label_map
+            parc, elec_df, tfm_list, label_map
         )
     else:
-        id = get_electrodes_id(parc, elec_df, df_cols, tfm_list, reference)
+        id = get_electrodes_id(parc, elec_df, tfm_list, reference)
         regions_per_chn = None
         mask = None
 
@@ -609,7 +580,7 @@ def readRegMatrix(trsfPath):
 
 # Function to create tsv with bipolar channels info
 def extract_location(
-    parc_path, chn_info_df, df_cols, tfm_list, colortable_file, reference, vol_version=False, mask_out_path = None
+    parc_path, chn_info_df, tfm_list, colortable_file, reference, vol_version=False, mask_out_path = None
 ):
     import os
     assert reference in ['bipolar', 'unipolar']
@@ -620,7 +591,7 @@ def extract_location(
     parc_obj = nb.load(parc_path)
     # Create df
     df, regions_per_chn , mask= get_label_rgb(
-        parc_obj, chn_info_df, tfm_list, labels, df_cols, reference, vol_version
+        parc_obj, chn_info_df, tfm_list, labels, reference, vol_version
     )
     # if not os.path.exists(out_tsv_name):
     #     df.to_csv(out_tsv_name, sep = '\t')
@@ -632,48 +603,37 @@ def extract_location(
 
 # Function to extract useful information from csv file
 def get_chn_info(
-    electrodes_df, electrodes_edf, reference, df_cols=None
+    electrodes_df, electrodes_edf, reference
 ):  # , conf = 'unipolar'
     assert reference in ['bipolar', 'unipolar']
     # df_cols (dict) = {type_record, label, x, y, z, group}
     # the dict can be in any order. The df will have the structure given
     # by the dict
-    if df_cols == None and reference=='unipolar':
-        df_cols = {
-            "type": "type",
-            "label": "label",
-            "x": "x",
-            "y": "y",
-            "z": "z",
-            "group": "group",
-        }
-    elif df_cols == None: # Bipolar case 
-        df_cols = {
-            "type": "type",
-            "group": "group",
-            "label": "label",
-            "x_init": "x_init",
-            "x_end": "x_end",
-            "y_init": "y_init",
-            "y_end": "y_end",
-            "z_init": "z_init",
-            "z_end": "z_end",
-        }
-    important_data = electrodes_df[list(df_cols.values())]
+    if reference=='unipolar':
+        df_cols = ["name", "x","y","z"]
+    else: # Bipolar case 
+        df_cols = ["name", "x_init", "x_end","y_init","y_end","z_init","z_end"]
+
+    important_data = electrodes_df[df_cols]
     important_data.reset_index()  # make sure indexes pair with number of rows
-    elec_df = pd.DataFrame(columns=list(df_cols.values()))
+    elec_df = pd.DataFrame(columns=df_cols)
+    tmp_df = []
+    discarded_chns = []
     for index in range(len(important_data)):
-        if important_data.loc[index, df_cols["label"]] in electrodes_edf:
+        if important_data.loc[index, 'name'] in electrodes_edf:
             tmp_df = pd.DataFrame(
-                [important_data.loc[index, list(df_cols.values())].values],
-                columns=list(df_cols.values()),
+                [important_data.loc[index, df_cols]],
+                columns=df_cols,
             )
             elec_df = pd.concat([elec_df, tmp_df], axis=0)
+        else:
+            discarded_chns.append(important_data.loc[index, 'name'])
+    assert len(tmp_df)>0, 'No electrodes from the electrodes.csv are in the EDF file. Make sure your reference is set correctly.'
     del tmp_df
     # reset index
     elec_df = elec_df.reset_index(drop=True)
-    chn_list = elec_df[df_cols["label"]].values.tolist()
-    return elec_df, chn_list, df_cols
+    chn_list = elec_df['name'].values.tolist()
+    return elec_df, chn_list, discarded_chns
 
 
 # Function to establish sampling rate of EDF file
@@ -842,6 +802,7 @@ def extract_channel_epoch(chn_number, edf_file, time_ids):
 # Function to create epochs and EDF file from them
 def create_epoch_EDF(edf_file, timestamp_init, n_val, out_path, processes):
     try:
+        
         edf_in = pyedflib.EdfReader(edf_file)
         # First import labels
         labels = edf_in.getSignalLabels()
@@ -864,7 +825,7 @@ def create_epoch_EDF(edf_file, timestamp_init, n_val, out_path, processes):
         t_end_id = int(t_end_id - n_val % edf_in.getSampleFrequencies()[0])
         t_ids = (t_init_id, t_end_id)
         # Relative initial time for epoch
-        t_0 = t[np.abs(np.subtract(t, timestamp_init)).argmin()]
+        t_0 = t[t_init_id]
         # Headers for unipolar case
         headers = edf_in.getSignalHeaders()
         # Close file
@@ -915,9 +876,10 @@ def create_epoch_EDF(edf_file, timestamp_init, n_val, out_path, processes):
         # print(f'Delta {delta}, Old date: {start_date}, New date: {start_date + delta} \n')
         new_date = start_date + delta
         # Write annotations
-        edf_out.writeAnnotation(t[t_init_id] - t_0, -1, f"Epoch starts.")
+        edf_out.writeAnnotation(0.0, -1, f"Epoch starts.")
+        t_end = t[t_end_id] - t_0
         edf_out.writeAnnotation(
-            t[t_end_id] - t_0, -1, f"Epoch ends."
+            t_end, -1, f"Epoch ends."
         )  # This no longer needs the +1
         # The plus 1 is required since the t[id] indicates start points, for the end epoch,
         # we want the final of the last datarecord!
@@ -928,6 +890,12 @@ def create_epoch_EDF(edf_file, timestamp_init, n_val, out_path, processes):
         edf_out.update_header()
         print(edf_out.recording_start_time)
         edf_out.close()
+
+        # Define a base datetime object with zero time
+        base_time = datetime.datetime(1900, 1, 1)
+        init_time = (base_time + delta).strftime("%H:%M:%S.%f")
+        duration = (base_time + datetime.timedelta(seconds=t_end)).strftime("%H:%M:%S.%f")
+        return init_time, duration # time init and duration
     except Exception:
         traceback.print_exc()
         edf_out.close()

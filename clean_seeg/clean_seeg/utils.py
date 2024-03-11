@@ -6,21 +6,70 @@ import numpy as np
 import pandas as pd
 import mne
 from .clean_drifts import clean_drifts
+import os
+
+# Function to plot filter
+def plot_filter(taps, nyq_rate, out_path, transition):
+    from scipy.signal import freqz
+    #------------------------------------------------
+    import matplotlib
+    matplotlib.use('agg')  # Set the backend to 'agg'
+
+    import matplotlib.pyplot as plt
+    import numpy as np
+    from scipy.signal import freqz
+    import os
+
+    # Your code follows here...
+
+    # Plot the FIR filter coefficients.
+    #------------------------------------------------
+    plt.figure(1)
+    plt.plot(taps, 'bo-', linewidth=2)
+    plt.title('Filter response in time')
+    plt.grid(True)
+    plt.savefig(os.path.join(out_path, 'filt_reponse.png'))
+
+    #------------------------------------------------
+    # Plot the magnitude response of the filter.
+    #------------------------------------------------
+
+    plt.figure(2)
+    plt.clf()
+    w, h = freqz(taps, worN=8000)
+    plt.plot((w/np.pi)*nyq_rate, np.absolute(h), linewidth=2)
+    plt.xlabel('Frequency (Hz)')
+    plt.ylabel('Gain')
+    plt.title('Frequency Response')
+    plt.ylim(-0.05, 1.05)
+    # Upper inset plot.
+    ax1 = plt.axes([0.42, 0.6, .45, .25])
+    plt.plot((w/np.pi)*nyq_rate, np.absolute(h), linewidth=2)
+    plt.xlim(0,transition[-1]+0.5)
+    plt.grid(True)
+
+    # Lower inset plot
+    ax2 = plt.axes([0.42, 0.25, .45, .25])
+    plt.plot((w/np.pi)*nyq_rate, np.absolute(h), linewidth=2)
+    plt.xlim(transition[-1], transition[-1]+1)
+    # plt.ylim(0.0, 0.0025)
+    plt.grid(True)
+    plt.savefig(os.path.join(out_path, 'filt_freq.png'))
 
 
 # Function to remove trend
 def remove_trend(raw, method, srate, Transition):
     import scipy.signal
-
+    filt_params=[]
     if method == "HighPass":
-        detsignal = clean_drifts(raw, srate, Transition=Transition)
+        detsignal, filt_params = clean_drifts(raw, srate, Transition=Transition)
     elif method == "LinearDetrend":
         # linear detrending
         detsignal = scipy.signal.detrend(raw, axis=-1)
     elif method == "Demean":
         raw_mean = np.mean(raw, axis=-1)
         detsignal = np.subtract(raw, raw_mean.reshape((raw_mean.shape[0], -1)))
-    return detsignal
+    return detsignal, filt_params
 
 
 def downsampling(chn, edf_file, orig_srate, target_srate):
@@ -138,10 +187,11 @@ def get_chn_labels(chn_csv_path, electrodes_edf):
 
     """
     elec_info = pd.read_csv(chn_csv_path, sep="\t")
-    labels_csv = elec_info["label"].values.tolist()
+    labels_csv = elec_info["name"].values.tolist()
     # Filter to get only labels that are also in edf file
-    labels = [label for label in labels_csv if label in electrodes_edf]
-    return labels
+    labels = [label for label in electrodes_edf if label in labels_csv]
+    discarded_labels = [label for label in electrodes_edf if label not in labels_csv]
+    return labels, discarded_labels
 
 
 def get_montage(ch_pos, subject, subjects_dir):

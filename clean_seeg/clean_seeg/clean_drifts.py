@@ -69,4 +69,4 @@ def clean_drifts(signal,srate,Transition=[0.5, 1],Attenuation=80):
     print('aqui')
     signal = filtfilt(filtkern, 1, signal, axis=-1)
     print('lolo')
-    return signal
+    return signal, [filtkern, nyq_rate]

@@ -1,36 +1,36 @@
 from pathlib import Path
-import sys
+import json
 import logging
 
-# Adding path to import cleanSEEG
-path = str(Path(Path(__file__).parent.absolute()).parent.parent.parent.absolute())
-# print(path)
-sys.path.append(path)
 
 # Import cleanSEEG
 from clean_seeg import cleanSEEG
 
 def main():
     edf_path = snakemake.input.edf
-    chn_tsv_path = snakemake.input.tsv
-    processes = snakemake.config['processes']
+    electrodes_tsv = snakemake.input.electrodes_tsv
+    processes = snakemake.threads
     out_edf = snakemake.output.out_edf
     out_tsv = snakemake.output.out_tsv
+    report_df = snakemake.output.report_df
+    report_json = snakemake.output.report_json
     LOG_FILENAME = snakemake.log[0]
     logging.basicConfig(filename=LOG_FILENAME, level=logging.DEBUG)
     try:
         # Call class
         seegTF = cleanSEEG(edf_path, # Using downsampled edf
-                        chn_tsv_path,
                         processes = processes)
 
-        # Define names of columns in tsv file
-        dict_keys = ['type','label','x','y','z','group']
-        dict_vals = snakemake.config['tsv_cols']
-        df_cols = dict(zip(dict_keys, dict_vals))
         # Apply rereferencing
-        seegTF.rereference(out_edf, write_tsv = True, out_tsv_path = out_tsv, df_cols = df_cols)
-
+        df_reref, report_reref = seegTF.rereference(electrodes_tsv,
+                                                    out_edf,
+                                                    write_tsv = True,
+                                                    out_tsv_path = out_tsv, 
+                                                    return_report=True)
+        # Save
+        df_reref.to_csv(report_df, index=False, sep="\t")
+        with open(report_json, 'w') as json_file:
+            json.dump(report_reref, json_file)
     except:
         logging.exception('Got exception on main handler')
         raise

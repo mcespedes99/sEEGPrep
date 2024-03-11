@@ -28,44 +28,54 @@ targets_by_analysis_level:
 #    https://bids-standard.github.io/pybids/generated/bids.layout.BIDSLayout.html#bids.layout.BIDSLayout.get
 
 pybids_inputs:
-  ieeg:
+  edf:
     filters:
-      suffix: 'ieeg'
+      # datatype: 'ieeg'
+      # suffix: 'ieeg'
       extension: '.edf'
-      datatype: 'ieeg'
-      task: 'full'
     wildcards:
       - subject
       - session
-      - acquisition
       - task
       - run
   
-  annotations:
+  events:
     filters:
-      suffix: 'annotations' #'events'
-      extension: '.tsv'
-      datatype: 'ieeg'
-      task: 'full'
-    wildcards:
-      - subject
-      - session
-      - acquisition
-      - task
-      - run
-  
-  electrodes_tsv:
-    filters:
-      suffix: 'native_SEEG'
-      space: 'native'
+      suffix: 'events'
       extension: '.tsv'
     wildcards:
       - subject
       - session
-      - acquisition
       - task
       - run
-    custom_path: /scratch/mcesped/Results/registration/subject_space/bids/sub-{subject}/ieeg/sub-{subject}_electrodes.tsv
+  
+  channels:
+    filters:
+      suffix: 'channels'
+      extension: '.tsv'
+    wildcards:
+      - subject
+      - session
+      - task
+      - run
+  
+  electrodes:
+    filters:
+      suffix: 'electrodes'
+      extension: '.tsv'
+    wildcards:
+      - subject
+      - session
+  
+  json:
+    filters:
+      # suffix: 'ieeg'
+      extension: '.json'
+    wildcards:
+      - subject
+      - session
+      - task
+      - run
 
   parc:
     filters:
@@ -113,16 +123,8 @@ bandwidth: 8
 # Default: 1 (only removes fundamental frequency)
 n_harmonics: 1
 
-# (2.f) Boolean to define whether to run autoreject to find noisy segments
-# of data or not. 
-# Default: True (runs autoreject)
-noiseDetect: False
-
 # (2.g) Transition band of high pass filter used in detrending step (if selected)
 highpass: [0.1, 0.2]
-
-# (2.h) Maximum duration of a flat line for a channel to be classified as clean
-maxFlatlineDuration: 5 
 
 # (2.i) Length of epochs to run Autoreject (in seconds).
 # Default: 5 seconds
@@ -134,6 +136,8 @@ epoch_length: 5
 # 'unknown' region
 # Default: True (discards the signals)
 discard_wm_un: True
+reference_edf: 'bipolar' # 'unipolar' or 'bipolar'
+vol_version: True 
 
 
 # 4. Parameter for regions identification and rereferencing step 
@@ -151,6 +155,9 @@ t1_to_coords_tfm: False
 
 # Data resources
 colortable: /scratch/mcesped/code/MNI_Registration/registration_workflow/resources/tpl-MNI305/atlas/FreeSurferColorLUT.tsv
+
+# QC
+bids_validator_flags: '--ignoreSubjectConsistency'
 
 #-------------------------------BIDS APP Configuration---------------------------
 #this configures the options to save the BIDSLayout
@@ -265,6 +272,8 @@ singularity:
     graham:
       diffparc: '/project/ctb-akhanf/akhanf/singularity/bids-apps/khanlab_diffparc-deps_v0.1.0-fix.sif'
       fmriprep: '/project/6050199/akhanf/singularity/bids-apps/poldracklab_fmriprep_20.1.1.sif' 
+      bids_validator: '/scratch/mcesped/containers/validator_latest.sif'
     docker:
       diffparc: 'docker://khanlab/diffparc-deps:v0.1.0-fix'
-      fmriprep: docker://nipreps/fmriprep:22.0.1'
+      fmriprep: 'docker://nipreps/fmriprep:22.0.1'
+      bids_validator: 'docker://bids/validator:latest'

@@ -2,18 +2,15 @@ from pathlib import Path
 import sys
 import logging
 
-# Adding path to import cleanSEEG
-path = str(Path(Path(__file__).parent.absolute()).parent.parent.parent.absolute())
-# print(path)
-sys.path.append(path)
-
 # Import cleanSEEG
 from clean_seeg import cleanSEEG
 
 def main():
     edf_path = snakemake.input.edf
-    processes = snakemake.config['processes']
+    chn_csv_path = snakemake.input.chn_csv
+    processes = snakemake.threads
     out_edf = snakemake.output.out_edf
+    report = snakemake.output.report_file
     LOG_FILENAME = snakemake.log[0]
     logging.basicConfig(filename=LOG_FILENAME, level=logging.DEBUG)
     try:
@@ -23,9 +20,12 @@ def main():
 
         # Apply downsampling
         target_srate = snakemake.config['target_srate']
-        signal_dsG, downsampledSrate = seegTF.downsample(target_srate=target_srate,
-                                                        write_edf = True,
-                                                        out_edf_path = out_edf)
+        signal_dsG, dn_report = seegTF.downsample(chn_csv_path,
+                                                  target_srate=target_srate,
+                                                  write_edf = True,
+                                                  out_edf_path = out_edf,
+                                                  return_report=True)
+        dn_report.to_csv(report, index=False, sep="\t")
     except:
         logging.exception('Got exception on main handler')
         raise

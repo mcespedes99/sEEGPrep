@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EEGQC Report</title>
+    <link rel="stylesheet" href="normalize.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <!-- <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.1.2/css/all.min.css" integrity="sha512-1sCRPdkRXhBV2PBLUdRb4tMg1w2YPf37qatUFeS7zlBy7jJI8Lf4VHwWfZZfpXtYSLy85pkm9GaYVYMfw5BC1A==" crossorigin="anonymous" referrerpolicy="no-referrer" /> -->
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,300;0,400;0,600;0,700;0,900;1,300;1,400;1,600;1,700;1,900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="app.css">
+</head>
+
+<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+<body>
+    <header class="header">
+        <h1 class="header__logo">EEGQC Report</h1>
+    </header>
+
+    <nav class="navigation">
+        <a href="#raw-info" class="navigation__link">Raw Information</a>
+        <a href="#validator-results" class="navigation__link">BIDS Validation Results</a>
+        <a href="#epoch-results" class="navigation__link">Epoching</a>
+        <a href="#detrend-results" class="navigation__link">Detrending</a>
+        <a href="#reref-results" class="navigation__link">Rereferencing</a>
+        <a href="#pli-results" class="navigation__link">PLI</a>
+        <a href="#regions-results" class="navigation__link">Regions ID</a>
+    </nav>
+
+    <main class="main">
+        <!-- Raw info -->
+        <section class="section" id="raw-info">
+            <h2 class="section_heading">Raw Information</h2>
+            <p class="section__description">Et quis adipisicing ipsum exercitation est amet adipisicing anim laboris. Aute et laborum quis ex ad officia deserunt sit laborum esse. Consequat do officia reprehenderit magna fugiat velit duis labore proident qui et labore laborum elit. Quis dolor id amet non aliquip Lorem dolor quis aliqua non nisi nisi.</p>
+            <article class="article">
+                <h2 class="article__heading">Info</h2>
+                <div id="raw-info" class="raw-info"></div>
+            </article>
+        </section>
+        
+        <!-- BIDS Validation -->
+        <section class="section" id="validator-results">
+            <h2 class="section_heading">BIDS Validation Results</h2>
+            <h2 class="section__heading">BIDS Validator Results</h2>
+            <p class="section__description">Suspendisse potenti. Quisque blandit urna vitae maximus tempor. Nunc dictum et elit luctus scelerisque. Pellentesque sodales placerat ante eu vulputate. Interdum et malesuada fames ac ante ipsum primis in faucibus. Maecenas nunc erat, accumsan et scelerisque eget, laoreet eget orci. Donec porta at justo vel ultricies. Integer vel libero sit amet justo rhoncus tempor vitae semper magna. Nunc at augue facilisis, viverra ante id, malesuada orci. </p>
+            <article class="article">
+                <div id="validator-results" class="validator-results"></div>
+            </article>
+            
+            <h2 class="section__heading">EEG/iEEG BIDS Validator Report</h2>
+            <p class="section__description">Suspendisse potenti. Quisque blandit urna vitae maximus tempor. Nunc dictum et elit luctus scelerisque. Pellentesque sodales placerat ante eu vulputate. Interdum et malesuada fames ac ante ipsum primis in faucibus. Maecenas nunc erat, accumsan et scelerisque eget, laoreet eget orci. Donec porta at justo vel ultricies. Integer vel libero sit amet justo rhoncus tempor vitae semper magna. Nunc at augue facilisis, viverra ante id, malesuada orci. </p>
+    
+            <div id="extra-validator-results" class="extra-validator-results"></div>
+        </section>
+        
+        <!-- Epoching -->
+        <section class="section" id="epoch-results">
+            <h2 class="section_heading">Epoch rule report</h2>
+            <h2 class="section__heading">Sampling rates</h2>
+            <p class="section__description">Suspendisse potenti. Quisque blandit urna vitae maximus tempor. Nunc dictum et elit luctus scelerisque. Pellentesque sodales placerat ante eu vulputate. Interdum et malesuada fames ac ante ipsum primis in faucibus. Maecenas nunc erat, accumsan et scelerisque eget, laoreet eget orci. Donec porta at justo vel ultricies. Integer vel libero sit amet justo rhoncus tempor vitae semper magna. Nunc at augue facilisis, viverra ante id, malesuada orci. </p>
+            <div id="srate-epochs" class="srate-epochs"></div>
+            
+            <h2 class="section__heading">Size comparison</h2>
+            <p class="section__description">Suspendisse potenti. Quisque blandit urna vitae maximus tempor. Nunc dictum et elit luctus scelerisque. Pellentesque sodales placerat ante eu vulputate. Interdum et malesuada fames ac ante ipsum primis in faucibus. Maecenas nunc erat, accumsan et scelerisque eget, laoreet eget orci. Donec porta at justo vel ultricies. Integer vel libero sit amet justo rhoncus tempor vitae semper magna. Nunc at augue facilisis, viverra ante id, malesuada orci. </p>
+            <div id="size-epochs" class="size-epochs"></div>
+
+            <h2 class="section__heading">PSD QC</h2>
+            <p class="section__description">Suspendisse potenti. Quisque blandit urna vitae maximus tempor. Nunc dictum et elit luctus scelerisque. Pellentesque sodales placerat ante eu vulputate. Interdum et malesuada fames ac ante ipsum primis in faucibus. Maecenas nunc erat, accumsan et scelerisque eget, laoreet eget orci. Donec porta at justo vel ultricies. Integer vel libero sit amet justo rhoncus tempor vitae semper magna. Nunc at augue facilisis, viverra ante id, malesuada orci. </p>
+            <div id="psd-epochs" class="psd-epochs"></div>
+        </section>
+
+        <!-- Detrending -->
+        <section class="section" id="detrend-results">
+            <h2 class="section_heading">Detrending rule report</h2>
+            <h2 class="section__heading">General information</h2>
+            <p class="section__description">Suspendisse potenti. Quisque blandit urna vitae maximus tempor. Nunc dictum et elit luctus scelerisque. Pellentesque sodales placerat ante eu vulputate. Interdum et malesuada fames ac ante ipsum primis in faucibus. Maecenas nunc erat, accumsan et scelerisque eget, laoreet eget orci. Donec porta at justo vel ultricies. Integer vel libero sit amet justo rhoncus tempor vitae semper magna. Nunc at augue facilisis, viverra ante id, malesuada orci. </p>
+            <div id="info-detrend" class="info-detrend"></div>
+            
+            <h2 class="section__heading">Comparison of channels mean</h2>
+            <p class="section__description">Suspendisse potenti. Quisque blandit urna vitae maximus tempor. Nunc dictum et elit luctus scelerisque. Pellentesque sodales placerat ante eu vulputate. Interdum et malesuada fames ac ante ipsum primis in faucibus. Maecenas nunc erat, accumsan et scelerisque eget, laoreet eget orci. Donec porta at justo vel ultricies. Integer vel libero sit amet justo rhoncus tempor vitae semper magna. Nunc at augue facilisis, viverra ante id, malesuada orci. </p>
+            <div id="mean-detrend" class="mean-detrend"></div>
+
+            <div id="filters-detrend" class="filters-detrend"></div>
+
+            <h2 class="section__heading">PSD QC</h2>
+            <p class="section__description">Suspendisse potenti. Quisque blandit urna vitae maximus tempor. Nunc dictum et elit luctus scelerisque. Pellentesque sodales placerat ante eu vulputate. Interdum et malesuada fames ac ante ipsum primis in faucibus. Maecenas nunc erat, accumsan et scelerisque eget, laoreet eget orci. Donec porta at justo vel ultricies. Integer vel libero sit amet justo rhoncus tempor vitae semper magna. Nunc at augue facilisis, viverra ante id, malesuada orci. </p>
+            <div id="psd-detrend" class="psd-detrend"></div>
+        </section>
+        
+        <!-- Rereferencing -->
+        <section class="section" id="reref-results">
+            <h2 class="section_heading">Rereferencing rule report</h2>
+            <h2 class="section__heading">General information</h2>
+            <p class="section__description">Suspendisse potenti. Quisque blandit urna vitae maximus tempor. Nunc dictum et elit luctus scelerisque. Pellentesque sodales placerat ante eu vulputate. Interdum et malesuada fames ac ante ipsum primis in faucibus. Maecenas nunc erat, accumsan et scelerisque eget, laoreet eget orci. Donec porta at justo vel ultricies. Integer vel libero sit amet justo rhoncus tempor vitae semper magna. Nunc at augue facilisis, viverra ante id, malesuada orci. </p>
+            <div id="info-reref" class="info-reref"></div>
+
+            <h2 class="section__heading">Bipolar channels found</h2>
+            <p class="section__description">Suspendisse potenti. Quisque blandit urna vitae maximus tempor. Nunc dictum et elit luctus scelerisque. Pellentesque sodales placerat ante eu vulputate. Interdum et malesuada fames ac ante ipsum primis in faucibus. Maecenas nunc erat, accumsan et scelerisque eget, laoreet eget orci. Donec porta at justo vel ultricies. Integer vel libero sit amet justo rhoncus tempor vitae semper magna. Nunc at augue facilisis, viverra ante id, malesuada orci. </p>
+            <div id="channels-reref" class="channels-reref"></div>
+        </section>
+
+
+        <!-- PLI reject -->
+        <section class="section" id="pli-results">
+            <h2 class="section_heading">PLI rule report</h2>
+            <h2 class="section__heading">General information</h2>
+            <p class="section__description">Suspendisse potenti. Quisque blandit urna vitae maximus tempor. Nunc dictum et elit luctus scelerisque. Pellentesque sodales placerat ante eu vulputate. Interdum et malesuada fames ac ante ipsum primis in faucibus. Maecenas nunc erat, accumsan et scelerisque eget, laoreet eget orci. Donec porta at justo vel ultricies. Integer vel libero sit amet justo rhoncus tempor vitae semper magna. Nunc at augue facilisis, viverra ante id, malesuada orci. </p>
+            <div id="info-pli" class="info-pli"></div>
+
+            <h2 class="section__heading">PSD QC</h2>
+            <p class="section__description">Suspendisse potenti. Quisque blandit urna vitae maximus tempor. Nunc dictum et elit luctus scelerisque. Pellentesque sodales placerat ante eu vulputate. Interdum et malesuada fames ac ante ipsum primis in faucibus. Maecenas nunc erat, accumsan et scelerisque eget, laoreet eget orci. Donec porta at justo vel ultricies. Integer vel libero sit amet justo rhoncus tempor vitae semper magna. Nunc at augue facilisis, viverra ante id, malesuada orci. </p>
+            <div id="psd-pli" class="psd-pli"></div>
+        </section>
+
+        <!-- Region ID reject -->
+        <section class="section" id="regions-results">
+            <h2 class="section_heading">Region Identification rule report</h2>
+            <h2 class="section__heading">General information</h2>
+            <p class="section__description">Suspendisse potenti. Quisque blandit urna vitae maximus tempor. Nunc dictum et elit luctus scelerisque. Pellentesque sodales placerat ante eu vulputate. Interdum et malesuada fames ac ante ipsum primis in faucibus. Maecenas nunc erat, accumsan et scelerisque eget, laoreet eget orci. Donec porta at justo vel ultricies. Integer vel libero sit amet justo rhoncus tempor vitae semper magna. Nunc at augue facilisis, viverra ante id, malesuada orci. </p>
+            <div id="info-regions" class="info-regions"></div>
+
+            <h2 class="section__heading">Regions report</h2>
+            <p class="section__description">Suspendisse potenti. Quisque blandit urna vitae maximus tempor. Nunc dictum et elit luctus scelerisque. Pellentesque sodales placerat ante eu vulputate. Interdum et malesuada fames ac ante ipsum primis in faucibus. Maecenas nunc erat, accumsan et scelerisque eget, laoreet eget orci. Donec porta at justo vel ultricies. Integer vel libero sit amet justo rhoncus tempor vitae semper magna. Nunc at augue facilisis, viverra ante id, malesuada orci. </p>
+            <div id="details-regions" class="details-regions"></div>
+        </section>
+    </main>
+
+    
+    
+    <footer class="footer">
+        <p>Created on February 17, 2024. &copy; Some rights reserved.</p>
+    </footer>
+</body>
+
+</html>

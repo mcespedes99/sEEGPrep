@@ -23,7 +23,7 @@ def reref_inputs():
     # Else if rereference is called but not any of the previous rules
     elif config['rereference']:
         #print('Reref is first')
-        return inputs.path['ieeg']
+        return inputs.path['edf']
     else: # Default: run_all
         #print('filter before reref (run all)')
         return rules.filter_data.output.out_edf
@@ -33,7 +33,7 @@ rule rereference:
     input:
         edf = reref_inputs(),
         # Other parameters
-        tsv = inputs.path['electrodes_tsv'],
+        electrodes_tsv = inputs.path['electrodes'],
     group:
         "subj"
     output:
@@ -48,6 +48,20 @@ rule rereference:
                         root=out_dir_reref(),
                         datatype='ieeg',
                         suffix='reref_native_space.tsv',
+                        rec='reref',
+                        **out_edf_wc
+                ),
+        report_df = bids(
+                        root='work',
+                        datatype='ieeg',
+                        suffix='report.tsv',
+                        rec='reref',
+                        **out_edf_wc
+                ),
+        report_json = bids(
+                        root='work',
+                        datatype='ieeg',
+                        suffix='report.json',
                         rec='reref',
                         **out_edf_wc
                 ),
