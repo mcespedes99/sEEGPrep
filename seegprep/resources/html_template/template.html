@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>EEGQC Report</title>
+    <title>sEEGPrep Report</title>
     <link rel="stylesheet" href="normalize.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -22,6 +22,7 @@
         <a href="#raw-info" class="navigation__link">Raw Information</a>
         <a href="#validator-results" class="navigation__link">BIDS Validation Results</a>
         <a href="#epoch-results" class="navigation__link">Epoching</a>
+        <a href="#downsample-results" class="navigation__link">Downsamplig</a>
         <a href="#detrend-results" class="navigation__link">Detrending</a>
         <a href="#reref-results" class="navigation__link">Rereferencing</a>
         <a href="#pli-results" class="navigation__link">PLI</a>
@@ -57,29 +58,40 @@
         <!-- Epoching -->
         <section class="section" id="epoch-results">
             <h2 class="section_heading">Epoch rule report</h2>
+            <div id="norun-epoch" class="norun-epoch"></div>
+            <h2 class="section__heading">Events found</h2>
+            <p class="section__description">Suspendisse potenti. Quisque blandit urna vitae maximus tempor. Nunc dictum et elit luctus scelerisque. Pellentesque sodales placerat ante eu vulputate. Interdum et malesuada fames ac ante ipsum primis in faucibus. Maecenas nunc erat, accumsan et scelerisque eget, laoreet eget orci. Donec porta at justo vel ultricies. Integer vel libero sit amet justo rhoncus tempor vitae semper magna. Nunc at augue facilisis, viverra ante id, malesuada orci. </p>
+            <div id="events-epoch" class="table-container"></div>
+        </section>
+
+        <!-- Downsampling -->
+        <section class="section" id="downsample-results">
+            <h2 class="section_heading">Downsamplig rule report</h2>
+            <div id="norun-downsample" class="norun-downsample"></div>
             <h2 class="section__heading">Sampling rates</h2>
             <p class="section__description">Suspendisse potenti. Quisque blandit urna vitae maximus tempor. Nunc dictum et elit luctus scelerisque. Pellentesque sodales placerat ante eu vulputate. Interdum et malesuada fames ac ante ipsum primis in faucibus. Maecenas nunc erat, accumsan et scelerisque eget, laoreet eget orci. Donec porta at justo vel ultricies. Integer vel libero sit amet justo rhoncus tempor vitae semper magna. Nunc at augue facilisis, viverra ante id, malesuada orci. </p>
-            <div id="srate-epochs" class="srate-epochs"></div>
+            <div id="srate-downsample" class="table-container"></div>
             
             <h2 class="section__heading">Size comparison</h2>
             <p class="section__description">Suspendisse potenti. Quisque blandit urna vitae maximus tempor. Nunc dictum et elit luctus scelerisque. Pellentesque sodales placerat ante eu vulputate. Interdum et malesuada fames ac ante ipsum primis in faucibus. Maecenas nunc erat, accumsan et scelerisque eget, laoreet eget orci. Donec porta at justo vel ultricies. Integer vel libero sit amet justo rhoncus tempor vitae semper magna. Nunc at augue facilisis, viverra ante id, malesuada orci. </p>
-            <div id="size-epochs" class="size-epochs"></div>
+            <div id="size-downsample" class="table-container"></div>
 
             <h2 class="section__heading">PSD QC</h2>
             <p class="section__description">Suspendisse potenti. Quisque blandit urna vitae maximus tempor. Nunc dictum et elit luctus scelerisque. Pellentesque sodales placerat ante eu vulputate. Interdum et malesuada fames ac ante ipsum primis in faucibus. Maecenas nunc erat, accumsan et scelerisque eget, laoreet eget orci. Donec porta at justo vel ultricies. Integer vel libero sit amet justo rhoncus tempor vitae semper magna. Nunc at augue facilisis, viverra ante id, malesuada orci. </p>
-            <div id="psd-epochs" class="psd-epochs"></div>
+            <div id="psd-downsample" class="psd-downsample"></div>
         </section>
 
         <!-- Detrending -->
         <section class="section" id="detrend-results">
             <h2 class="section_heading">Detrending rule report</h2>
+            <div id="norun-detrend" class="norun-detrend"></div>
             <h2 class="section__heading">General information</h2>
             <p class="section__description">Suspendisse potenti. Quisque blandit urna vitae maximus tempor. Nunc dictum et elit luctus scelerisque. Pellentesque sodales placerat ante eu vulputate. Interdum et malesuada fames ac ante ipsum primis in faucibus. Maecenas nunc erat, accumsan et scelerisque eget, laoreet eget orci. Donec porta at justo vel ultricies. Integer vel libero sit amet justo rhoncus tempor vitae semper magna. Nunc at augue facilisis, viverra ante id, malesuada orci. </p>
             <div id="info-detrend" class="info-detrend"></div>
             
             <h2 class="section__heading">Comparison of channels mean</h2>
             <p class="section__description">Suspendisse potenti. Quisque blandit urna vitae maximus tempor. Nunc dictum et elit luctus scelerisque. Pellentesque sodales placerat ante eu vulputate. Interdum et malesuada fames ac ante ipsum primis in faucibus. Maecenas nunc erat, accumsan et scelerisque eget, laoreet eget orci. Donec porta at justo vel ultricies. Integer vel libero sit amet justo rhoncus tempor vitae semper magna. Nunc at augue facilisis, viverra ante id, malesuada orci. </p>
-            <div id="mean-detrend" class="mean-detrend"></div>
+            <div id="mean-detrend" class="table-container"></div>
 
             <div id="filters-detrend" class="filters-detrend"></div>
 
@@ -91,19 +103,21 @@
         <!-- Rereferencing -->
         <section class="section" id="reref-results">
             <h2 class="section_heading">Rereferencing rule report</h2>
+            <div id="norun-reref" class="norun-reref"></div>
             <h2 class="section__heading">General information</h2>
             <p class="section__description">Suspendisse potenti. Quisque blandit urna vitae maximus tempor. Nunc dictum et elit luctus scelerisque. Pellentesque sodales placerat ante eu vulputate. Interdum et malesuada fames ac ante ipsum primis in faucibus. Maecenas nunc erat, accumsan et scelerisque eget, laoreet eget orci. Donec porta at justo vel ultricies. Integer vel libero sit amet justo rhoncus tempor vitae semper magna. Nunc at augue facilisis, viverra ante id, malesuada orci. </p>
             <div id="info-reref" class="info-reref"></div>
 
             <h2 class="section__heading">Bipolar channels found</h2>
             <p class="section__description">Suspendisse potenti. Quisque blandit urna vitae maximus tempor. Nunc dictum et elit luctus scelerisque. Pellentesque sodales placerat ante eu vulputate. Interdum et malesuada fames ac ante ipsum primis in faucibus. Maecenas nunc erat, accumsan et scelerisque eget, laoreet eget orci. Donec porta at justo vel ultricies. Integer vel libero sit amet justo rhoncus tempor vitae semper magna. Nunc at augue facilisis, viverra ante id, malesuada orci. </p>
-            <div id="channels-reref" class="channels-reref"></div>
+            <div id="channels-reref" class="table-container"></div>
         </section>
 
 
         <!-- PLI reject -->
         <section class="section" id="pli-results">
             <h2 class="section_heading">PLI rule report</h2>
+            <div id="norun-pli" class="norun-pli"></div>
             <h2 class="section__heading">General information</h2>
             <p class="section__description">Suspendisse potenti. Quisque blandit urna vitae maximus tempor. Nunc dictum et elit luctus scelerisque. Pellentesque sodales placerat ante eu vulputate. Interdum et malesuada fames ac ante ipsum primis in faucibus. Maecenas nunc erat, accumsan et scelerisque eget, laoreet eget orci. Donec porta at justo vel ultricies. Integer vel libero sit amet justo rhoncus tempor vitae semper magna. Nunc at augue facilisis, viverra ante id, malesuada orci. </p>
             <div id="info-pli" class="info-pli"></div>
@@ -116,13 +130,14 @@
         <!-- Region ID reject -->
         <section class="section" id="regions-results">
             <h2 class="section_heading">Region Identification rule report</h2>
+            <div id="norun-regions" class="norun-regions"></div>
             <h2 class="section__heading">General information</h2>
             <p class="section__description">Suspendisse potenti. Quisque blandit urna vitae maximus tempor. Nunc dictum et elit luctus scelerisque. Pellentesque sodales placerat ante eu vulputate. Interdum et malesuada fames ac ante ipsum primis in faucibus. Maecenas nunc erat, accumsan et scelerisque eget, laoreet eget orci. Donec porta at justo vel ultricies. Integer vel libero sit amet justo rhoncus tempor vitae semper magna. Nunc at augue facilisis, viverra ante id, malesuada orci. </p>
             <div id="info-regions" class="info-regions"></div>
 
             <h2 class="section__heading">Regions report</h2>
             <p class="section__description">Suspendisse potenti. Quisque blandit urna vitae maximus tempor. Nunc dictum et elit luctus scelerisque. Pellentesque sodales placerat ante eu vulputate. Interdum et malesuada fames ac ante ipsum primis in faucibus. Maecenas nunc erat, accumsan et scelerisque eget, laoreet eget orci. Donec porta at justo vel ultricies. Integer vel libero sit amet justo rhoncus tempor vitae semper magna. Nunc at augue facilisis, viverra ante id, malesuada orci. </p>
-            <div id="details-regions" class="details-regions"></div>
+            <div id="details-regions" class="table-container"></div>
         </section>
     </main>
 

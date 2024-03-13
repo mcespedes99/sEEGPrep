@@ -16,14 +16,14 @@ import pyedflib
 def get_filt_figures(figures):
     # figures: list of tuples with file, title
     html_code = f"""
-        <h2 class="section__heading">Comparison of channels mean</h2>
+        <h2 class="section__heading">Highpass filter information</h2>
         <p class="section__description">Suspendisse potenti. Quisque blandit urna vitae maximus tempor.
     """ 
     for fig_path, title in figures:
         template = f"""
                 <article class="article">
                     <h2 class="article__heading">{title}</h2>
-                    <img src="{fig_path}" alt="Article Image" class="article__image" style="display: block; margin-left: auto; margin-right: auto; max-width: 20cm;">
+                    <img src="{fig_path}" alt="Article Image" class="article__image" style="display: block; margin-left: auto; margin-right: auto; max-width: 15cm;">
                 </article>
             """
         html_code = html_code + template
@@ -123,22 +123,31 @@ def process_extraval(extraval_txt):
     for line in bids_val_results:
         line.replace("\n", "")
     # convert to html
-    results_val = """<ul>
+    results_val = """<ul class="list">
     """
+    passed = []
+    errors = []
     for error in bids_val_results:
-        # Apply green color to "Test PASSED."
         error = error.replace(
-            "Test PASSED.", '<span style="color: green;">Test PASSED.</span>'
+            "Warning:", '<span>Warning:</span>'
         )
-        # Apply red color to "Warning:" and bold "Info:"
-        error = error.replace(
-            "Warning:", '<span style="color: red; font-weight: bold;">Warning:</span>'
-        )
-        error = error.replace("Info:", '<span style="font-weight: bold;">Info:</span>')
-
+        error = error.replace("Info:", '<span>Info:</span>')
+        if "Info" in error:
+            passed.append(error)
+        else:
+            errors.append(error)
+    results_val += f""" <div class="list-section success">"""
+    for error in passed:
         results_val += f"""
-        <li>{error}</li>
+        <li class="li-success">{error}</li>
         """
+    results_val += """</div> <div class="list-section error">"""
+    for error in errors:
+        results_val += f"""
+        <li class="li-error">{error}</li>
+        """
+    results_val += """</div>"""
+
     results_val += """</ul>
     """
     return results_val
@@ -301,40 +310,6 @@ def process_json(json_file):
     """
     return html_code
 
-def process_df_html(html_table):
-    # Add custom CSS styles directly into the HTML table
-    html_table_with_style = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <style>
-            .styled-table {{
-                width: 100%;
-                border-collapse: collapse;
-                border: 2px solid #ddd;
-            }}
-            .styled-table th, .styled-table td {{
-                padding: 8px;
-                text-align: center;
-            }}
-            .styled-table th {{
-                background-color: #f2f2f2;
-                border: 1px solid #ddd;
-            }}
-            .styled-table tr:nth-child(even) {{
-                background-color: #f2f2f2;
-            }}
-        </style>
-    </head>
-    <body>
-    {html_table}
-    </body>
-    </html>
-    """
-
-    # Insert CSS styles into the HTML table
-    return html_table_with_style
-
 def main():
     # Get all inputs
     final_edf = snakemake.input.edf
@@ -374,23 +349,30 @@ def main():
         extra_val_html = process_extraval(extraval_txt)
         append_to_template(out_html, "extra-validator-results", extra_val_html, "extra-validator-results")
         del extra_val_html
+        
+        # No run message
+        norun_html = """<ul>
+        <li>Rule was not called; therefore, no results will be shown.</li>
+        </ul>
+        """
 
         # 4. Epoching
         if len(snakemake.input.epoch_inputs)>0:
             df_epoch = snakemake.input.epoch_inputs[0]
             df = pd.read_csv(df_epoch, sep='\t')
-            html_table = process_df_html(df.to_html(index=False, classes='styled-table', justify='center'))
-            append_to_template(out_html, "extra-validator-results", html_table, "extra-validator-results")
+            html_table = df.to_html(index=False, classes='styled-table', justify='center')
+            append_to_template(out_html, "events-epoch", html_table, "table-container")
             del df, html_table
-
+        else:
+            append_to_template(out_html, "norun-epoch", norun_html, "norun-epoch")
         
         # 5. DOWNSAMPLING REPORT
         if len(snakemake.input.dn_inputs)>0:
             dn_df, edf_dn, edf_prev = snakemake.input.dn_inputs
             # 5.1. Sampling rates
             df = pd.read_csv(dn_df, sep='\t')
-            html_table = process_df_html(df.to_html(index=False, classes='styled-table', justify='center'))
-            append_to_template(out_html, "srate-epochs", html_table, "srate-epochs")
+            html_table = df.to_html(index=False, classes='styled-table', justify='center')
+            append_to_template(out_html, "srate-downsample", html_table, "table-container")
             # 5.2 Size comparison
             epoch_size = os.path.getsize(edf_prev)/(10**6) # MB
             dn_size = os.path.getsize(edf_dn)/(10**6) # MB
@@ -400,15 +382,18 @@ def main():
                 'Compression rate': [np.round(epoch_size/dn_size,2)]
             }
             df = pd.DataFrame(size_comp)
-            html_table = process_df_html(df.to_html(index=False, classes='styled-table', justify='center'))
-            append_to_template(out_html, "size-epochs", html_table, "size-epochs")
+            html_table = df.to_html(index=False, classes='styled-table', justify='center')
+            append_to_template(out_html, "size-downsample", html_table, "table-container")
             # 5.3 PSD comparison
             df_orig = get_PSD(edf_prev)
             df_new = get_PSD(edf_dn)
             html_code = plot_PSD_channels(df_orig, df_new, ["Original","Downsampled"])
-            append_to_template(out_html, "psd-epochs", html_code, "psd-epochs")
+            append_to_template(out_html, "psd-downsample", html_code, "psd-downsample")
             del df, html_table, df_orig, df_new, html_code
+        else:
+            append_to_template(out_html, "norun-downsample", norun_html, "norun-downsample")
 
+       
         # 6. DETRENDING
         if len(snakemake.input.detrend_inputs)>0:
             df_detrend, json_detrend, edf_clean_detrend, edf_prev = snakemake.input.detrend_inputs
@@ -416,8 +401,8 @@ def main():
             html_code = process_json(json_detrend)
             append_to_template(out_html, "info-detrend", html_code, "info-detrend")
             df = pd.read_csv(df_detrend, sep='\t')
-            html_table = process_df_html(df.to_html(index=False, classes='styled-table', justify='center'))
-            append_to_template(out_html, "mean-detrend", html_table, "mean-detrend")
+            html_table = df.to_html(index=False, classes='styled-table', justify='center')
+            append_to_template(out_html, "mean-detrend", html_table, "table-container")
             # 6.2. Filter figures
             if os.path.exists(os.path.join(os.path.dirname(edf_clean_detrend), 'filt_reponse.png')):
                 # Move images to report folder
@@ -438,6 +423,9 @@ def main():
             html_code = plot_PSD_channels(df_orig, df_new, ["Original", "Detrended"])
             append_to_template(out_html, "psd-detrend", html_code, "psd-detrend")
             del html_code, df, html_table, df_orig, df_new
+        else:
+            append_to_template(out_html, "norun-detrend", norun_html, "norun-detrend")
+
 
         # 7. REREFERENCING
         if len(snakemake.input.reref_inputs)>0:
@@ -447,9 +435,12 @@ def main():
             append_to_template(out_html, "info-reref", html_code, "info-reref")
             # 7.2. Table with bipolar comb
             df = pd.read_csv(df_reref, sep='\t')
-            html_table = process_df_html(df.to_html(index=False, classes='styled-table', justify='center'))
-            append_to_template(out_html, "channels-reref", html_table, "channels-reref")
+            html_table = df.to_html(index=False, classes='styled-table', justify='center')
+            append_to_template(out_html, "channels-reref", html_table, "table-container")
             del df, html_code, html_table
+        else:
+            append_to_template(out_html, "norun-reref", norun_html, "norun-reref")
+
 
         # 8. PLI Reject
         if len(snakemake.input.PLI_inputs)>0:
@@ -463,6 +454,8 @@ def main():
             html_code = plot_PSD_channels(df_orig, df_new, ["Original", "Filtered"])
             append_to_template(out_html, "psd-pli", html_code, "psd-pli")
             del html_code, df_orig, df_new
+        else:
+            append_to_template(out_html, "norun-pli", norun_html, "norun-pli")
 
         # 9. Region ID 
         if len(snakemake.input.regionID_inputs)>0:
@@ -472,9 +465,11 @@ def main():
             append_to_template(out_html, "info-regions", html_code, "info-regions")
             # Regions report
             df = pd.read_csv(df_regionID, sep='\t')
-            html_table = process_df_html(df.to_html(index=False, classes='styled-table', justify='center'))
-            append_to_template(out_html, "details-regions", html_table, "details-regions")
+            html_table = df.to_html(index=False, classes='styled-table', justify='center')
+            append_to_template(out_html, "details-regions", html_table, "table-container")
             del html_code, df, html_table
+        else:
+            append_to_template(out_html, "norun-regions", norun_html, "norun-regions")
         
         # Add pyprep results
         # pyprep_json = snakemake.input.pyprep_json
