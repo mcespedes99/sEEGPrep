@@ -69,7 +69,7 @@ pybids_inputs:
   
   json:
     filters:
-      # suffix: 'ieeg'
+      suffix: 'ieeg'
       extension: '.json'
     wildcards:
       - subject
@@ -96,7 +96,7 @@ event: ['awake trigger', 'duration', 240] # 4 min 'awake trigger'
 # 1. Parameters for downsampling step:
 # (1.a) Target sampling rate
 # Default: 200 Hz
-target_srate: 200
+target_srate: 1024
 
 
 # 2. Parameters for filtering step:

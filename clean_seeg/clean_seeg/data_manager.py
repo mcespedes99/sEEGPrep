@@ -19,6 +19,10 @@ import SimpleITK as sitk
 from skimage.morphology import dilation
 from skimage.morphology import ball
 import datetime
+# import dask
+# import dask.array as da
+# from dask.distributed import Client
+
 
 
 # Function to create bipolar channels from given unipolars
@@ -798,41 +802,44 @@ def extract_channel_epoch(chn_number, edf_file, time_ids):
     edf_in.close()
     return signal
 
+# @dask.delayed
+# def load_segment(file_path, channel_index, start_sample, end_sample):
+#     with pyedflib.EdfReader(file_path) as f:
+#         # Load the specified segment from the file
+#         segment_data = f.readSignal(channel_index, start=start_sample, n=end_sample - start_sample)
+#     return segment_data
 
 # Function to create epochs and EDF file from them
 def create_epoch_EDF(edf_file, timestamp_init, n_val, out_path, processes):
     try:
+        with pyedflib.EdfReader(edf_file) as edf_in:
+            # First import labels
+            labels = edf_in.getSignalLabels()
+            # First get the data from the header of the edf file
+            header = edf_in.getHeader()
+            # Get each channel info:
+            # Sampling rate:
+            srate = edf_in.getSampleFrequencies()[0] / edf_in.datarecord_duration
+            # Build epochs
+            N = edf_in.getNSamples()[0]
+            # Time vector:
+            t = np.arange(0, N + 1) / srate
+            # The plus 1 is required since the t[id] indicates start points.
+            # Time ids
+            t_init_id = np.abs(np.subtract(t, timestamp_init)).argmin()
+            n_val = min(n_val, N - t_init_id)
+            t_end_id = (
+                t_init_id + n_val
+            )  # has to be this way so that when I substract them, I get n_val back
+            t_end_id = int(t_end_id - n_val % edf_in.getSampleFrequencies()[0])
+            t_ids = (t_init_id, t_end_id)
+            # Relative initial time for epoch
+            t_0 = t[t_init_id]
+            # Headers for unipolar case
+            headers = edf_in.getSignalHeaders()
         
-        edf_in = pyedflib.EdfReader(edf_file)
-        # First import labels
-        labels = edf_in.getSignalLabels()
-        # First get the data from the header of the edf file
-        header = edf_in.getHeader()
-        # Get each channel info:
-        # Sampling rate:
-        srate = edf_in.getSampleFrequencies()[0] / edf_in.datarecord_duration
-        # Build epochs
-        N = edf_in.getNSamples()[0]
-        # Time vector:
-        t = np.arange(0, N + 1) / srate
-        # The plus 1 is required since the t[id] indicates start points.
-        # Time ids
-        t_init_id = np.abs(np.subtract(t, timestamp_init)).argmin()
-        n_val = min(n_val, N - t_init_id)
-        t_end_id = (
-            t_init_id + n_val
-        )  # has to be this way so that when I substract them, I get n_val back
-        t_end_id = int(t_end_id - n_val % edf_in.getSampleFrequencies()[0])
-        t_ids = (t_init_id, t_end_id)
-        # Relative initial time for epoch
-        t_0 = t[t_init_id]
-        # Headers for unipolar case
-        headers = edf_in.getSignalHeaders()
-        # Close file
-        edf_in.close()
         # Extract channel information:
         chn_lists = range(len(labels))
-        # Unipolar case:
         with Pool(processes=processes) as pool2:
             channel_data = pool2.map(
                 partial(
@@ -842,55 +849,75 @@ def create_epoch_EDF(edf_file, timestamp_init, n_val, out_path, processes):
                 ),
                 chn_lists,
             )
+        # Create a list to hold the Dask arrays for each channel
+        # channel_arrays = []
+        # # Set dask Client
+        # # client = Client(n_workers=processes)
+
+        # for channel_index in range(len(chn_lists)):
+        #     # Create delayed tasks for each segment in each channel
+        #     segment_tasks = load_segment(edf_file, channel_index, t_init_id, t_end_id)
+
+        #     # Create a Dask array for the channel
+        #     channel_array = da.from_delayed(segment_tasks, shape=(t_end_id - t_init_id,), dtype=float).rechunk()
+            
+        #     # Add the channel array to the list
+        #     channel_arrays.append(channel_array)
+
+        # # Combine the channel arrays into a single Dask array with an additional channel dimension
+        # multi_channel_array = da.stack(channel_arrays, axis=0)
         
         # Start writing
-        # Create file:
-        edf_out = pyedflib.EdfWriter(
-            out_path, len(labels), file_type=pyedflib.FILETYPE_EDFPLUS
-        )
-        # Change the start date of the header
-        start_date = edf_in.getStartdatetime()
-        delta = datetime.timedelta(seconds=t_0)
-        new_date = start_date + delta
-        header['startdate']=new_date
-        edf_out.setHeader(header)
-        # f.datarecord_duration gives the value is sec and setDatarecordDuration receives it in units
-        # of 10 ms. Therefore: setDatarecordDuration = datarecord_duration*10^6 / 10
-        edf_out.setDatarecordDuration(
-            int(edf_in.datarecord_duration * 100000)
-        )  # This actually is used to set the sample frequency
-        edf_out.writeAnnotation(0, -1, "Recording starts")
-        # Edit headers to make them compliant with edf files
-        for header in headers:
-            header["physical_max"] = int(header["physical_max"])
-            header["physical_min"] = int(header["physical_min"])
-            if len(str(header["physical_max"])) > 8:
-                header["physical_max"] = int(str(header["physical_max"])[0:8])
-            if len(str(header["physical_min"])) > 8:
-                header["physical_min"] = int(str(header["physical_min"])[0:8])
+        with pyedflib.EdfWriter(out_path, len(labels), file_type=pyedflib.FILETYPE_EDFPLUS) as writer:
+            # Change the start date of the header
+            start_date = edf_in.getStartdatetime()
+            delta = datetime.timedelta(seconds=t_0)
+            new_date = start_date + delta
+            header['startdate']=new_date
+            writer.setHeader(header)
+            # f.datarecord_duration gives the value is sec and setDatarecordDuration receives it in units
+            # of 10 ms. Therefore: setDatarecordDuration = datarecord_duration*10^6 / 10
+            writer.setDatarecordDuration(
+                int(edf_in.datarecord_duration * 100000)
+            )  # This actually is used to set the sample frequency
+            writer.writeAnnotation(0, -1, "Recording starts")
+            # Edit headers to make them compliant with edf files
+            for header in headers:
+                header["physical_max"] = int(header["physical_max"])
+                header["physical_min"] = int(header["physical_min"])
+                if len(str(header["physical_max"])) > 8:
+                    header["physical_max"] = int(str(header["physical_max"])[0:8])
+                if len(str(header["physical_min"])) > 8:
+                    header["physical_min"] = int(str(header["physical_min"])[0:8])
 
-        edf_out.setSignalHeaders(headers)
-        edf_out.writeSamples(channel_data)
-        # Change start date
-        delta = datetime.timedelta(seconds=t_0)
-        # print(f'Delta {delta}, Old date: {start_date}, New date: {start_date + delta} \n')
-        new_date = start_date + delta
-        # Write annotations
-        edf_out.writeAnnotation(0.0, -1, f"Epoch starts.")
-        t_end = t[t_end_id] - t_0
-        edf_out.writeAnnotation(
-            t_end, -1, f"Epoch ends."
-        )  # This no longer needs the +1
-        # The plus 1 is required since the t[id] indicates start points, for the end epoch,
-        # we want the final of the last datarecord!
-        # Deallocate space in memory
-        del t
-        # print('set new date\n', flush=True)
-        edf_out.setStartdatetime(new_date)
-        edf_out.update_header()
-        print(edf_out.recording_start_time)
-        edf_out.close()
-
+            writer.setSignalHeaders(headers)
+            # Write data for each channel: This could be done through a for loop per channel 
+            # or also using dask as seen below, but it just takes too long
+            writer.writeSamples(channel_data)
+            # for i in range(len(chn_lists)):
+            #     print(i)
+            #     # Compute the Dask array for the channel to get the data in memory
+            #     # NOTE: This might require substantial memory for large datasets
+            #     data = multi_channel_array[i].compute()
+            #     writer.writePhysicalSamples(data)
+            # Change start date
+            delta = datetime.timedelta(seconds=t_0)
+            # print(f'Delta {delta}, Old date: {start_date}, New date: {start_date + delta} \n')
+            new_date = start_date + delta
+            # Write annotations
+            writer.writeAnnotation(0.0, -1, f"Epoch starts.")
+            t_end = t[t_end_id] - t_0
+            writer.writeAnnotation(
+                t_end, -1, f"Epoch ends."
+            )  # This no longer needs the +1
+            # The plus 1 is required since the t[id] indicates start points, for the end epoch,
+            # we want the final of the last datarecord!
+            # Deallocate space in memory
+            del t
+            # print('set new date\n', flush=True)
+            writer.setStartdatetime(new_date)
+            writer.update_header()
+            print(writer.recording_start_time)
         # Define a base datetime object with zero time
         base_time = datetime.datetime(1900, 1, 1)
         init_time = (base_time + delta).strftime("%H:%M:%S.%f")
@@ -898,8 +925,6 @@ def create_epoch_EDF(edf_file, timestamp_init, n_val, out_path, processes):
         return init_time, duration # time init and duration
     except Exception:
         traceback.print_exc()
-        edf_out.close()
-        edf_in.close()
 
 
 # # Function to extract epochs

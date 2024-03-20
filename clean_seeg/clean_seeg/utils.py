@@ -71,6 +71,18 @@ def remove_trend(raw, method, srate, Transition):
         detsignal = np.subtract(raw, raw_mean.reshape((raw_mean.shape[0], -1)))
     return detsignal, filt_params
 
+def downsampling_mne(chn_name, edf_file, target_srate):
+    with mne.utils.use_log_level('ERROR'):
+        # Read raw without loading
+        raw = mne.io.read_raw_edf(edf_file, preload=False, verbose=False)
+        # Pick channel
+        raw_ch = raw.copy().pick_channels([chn_name])
+        # Load data and resample
+        raw_ch.load_data()
+        raw_ch.resample(target_srate, npad="auto")
+        # Have to multiply by 10^6 as mne return Volts and pyedlib uses uV
+        return raw_ch.get_data().squeeze()*10**6, raw_ch.info['sfreq']
+
 
 def downsampling(chn, edf_file, orig_srate, target_srate):
     import pyedflib

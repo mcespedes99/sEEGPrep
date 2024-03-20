@@ -4,6 +4,7 @@ from .utils import (
     plot_filter,
     get_chn_positions,
     downsampling,
+    downsampling_mne,
     remove_trend,
 )
 from .clean_autoreject import create_mne_epochs, run_autoreject
@@ -58,9 +59,8 @@ class cleanSEEG:
         self.subjects_dir = None
 
         # Find sample rate
-        edf_in = pyedflib.EdfReader(edf_path)
-        self.srate = edf_in.getSampleFrequencies()[0] / edf_in.datarecord_duration
-        edf_in.close()
+        with pyedflib.EdfReader(edf_path) as edf_in:
+            self.srate = edf_in.getSampleFrequencies()[0] / edf_in.datarecord_duration
 
     # Epoch extraction
     def extract_epochs(
@@ -90,48 +90,46 @@ class cleanSEEG:
             'Duration': [],
             'Clip number' : []
         }
-        # Find indexes from events
-        f = pyedflib.EdfReader(self.edf_path)
-        # Number of samples in edf
-        N = f.getNSamples()[0]
-        # Get number of samples if not defined
-        # Sampling rate:
-        srate = f.getSampleFrequencies()[0] / f.datarecord_duration
-        if not n_samples:
-            # Get number of samples based on event duration
-            n_samples = int(event_dur * srate)
-        # Check than n_samples is not bigger than N
-        if n_samples > N:
-            print('Number of samples bigger than number of points in file, changing to the max.\n', flush=True)
-            n_samples = N
-        # Adjust n_samples depending on the datarecord duration and the number of samples in file
-        remainder = n_samples % f.getSampleFrequencies()[0]
-        if remainder != 0:
-            n_samples += f.getSampleFrequencies()[0] - remainder
-        
-        # Find timestamps
-        t = np.arange(0, N) / srate
-        if event_start is not None:
-            # Two possibilities: label or index
-            if isinstance(event_start, int):
-                time_stamps_init = t[event_start]
-            else:    
-                id = [
-                    value[0]
-                    for value in enumerate(f.readAnnotations()[2])
-                    if re.match(event_start, value[1], re.IGNORECASE)
-                ]
-                # Create df with annotations
-                onset_list = f.readAnnotations()[0]
-                # Find time stamps where the 'awake trigger' event is happening
-                time_stamps_init = onset_list[id]
-            # Make sure it's a list
-            if not hasattr(time_stamps_init, '__iter__'):
-                time_stamps_init = [time_stamps_init]
-        else:
-            time_stamps_init = t[::n_samples]
+        with pyedflib.EdfReader(self.edf_path) as f:
+            # Number of samples in edf
+            N = f.getNSamples()[0]
+            # Get number of samples if not defined
+            # Sampling rate:
+            srate = f.getSampleFrequencies()[0] / f.datarecord_duration
+            if not n_samples:
+                # Get number of samples based on event duration
+                n_samples = int(event_dur * srate)
+            # Check than n_samples is not bigger than N
+            if n_samples > N:
+                print('Number of samples bigger than number of points in file, changing to the max.\n', flush=True)
+                n_samples = N
+            # Adjust n_samples depending on the datarecord duration and the number of samples in file
+            remainder = n_samples % f.getSampleFrequencies()[0]
+            if remainder != 0:
+                n_samples += f.getSampleFrequencies()[0] - remainder
+            
+            # Find timestamps
+            t = np.arange(0, N) / srate
+            if event_start is not None:
+                # Two possibilities: label or index
+                if isinstance(event_start, int):
+                    time_stamps_init = t[event_start]
+                else:    
+                    id = [
+                        value[0]
+                        for value in enumerate(f.readAnnotations()[2])
+                        if re.match(event_start, value[1], re.IGNORECASE)
+                    ]
+                    # Create df with annotations
+                    onset_list = f.readAnnotations()[0]
+                    # Find time stamps where the 'awake trigger' event is happening
+                    time_stamps_init = onset_list[id]
+                # Make sure it's a list
+                if not hasattr(time_stamps_init, '__iter__'):
+                    time_stamps_init = [time_stamps_init]
+            else:
+                time_stamps_init = t[::n_samples]
 
-        f.close()
         # print(time_stamps)
         # Copy file to local scratch if possible
         new_edf = None
@@ -215,10 +213,9 @@ class cleanSEEG:
         print("Running rereference")
         # Extract info about electrodes positions
         elec_pos = pd.read_csv(electrodes_tsv, sep="\t")
-        # Extract channels present in edf file (might not be all)
-        edf = pyedflib.EdfReader(self.edf_path)
-        elec_edf = edf.getSignalLabels()
-        edf.close()
+        with pyedflib.EdfReader(self.edf_path) as reader:
+            # Extract channels present in edf file (might not be all)
+            elec_edf = reader.getSignalLabels()
         # First check with electrodes are in electrodes.tsv and EDF
         _, discarded_labels = get_chn_labels(electrodes_tsv, elec_edf)
         assert len(discarded_labels)<len(elec_pos) # If not, it means the edf if wrong format or it's already bipolar
@@ -391,19 +388,12 @@ class cleanSEEG:
         # print('aqui')
         # print(self.edf_path)
         # Open edf file
-        edf_in = pyedflib.EdfReader(self.edf_path)
-        # Extract labels to only process signals in tsv file
-        labels = edf_in.getSignalLabels()
-        chn_labels, discarded_labels = get_chn_labels(channels_tsv, labels)
-        # Number of samples
-        N = edf_in.getNSamples()[0]
-        # Create signal list
-        channels = []
-        # Extract signal per channel
-        for chan in chn_labels:
-            id_ch = labels.index(chan)
-            channels.append(id_ch)
-        edf_in.close()
+        with pyedflib.EdfReader(self.edf_path) as reader:
+            # Extract labels to only process signals in tsv file
+            labels = reader.getSignalLabels()
+            chn_labels, discarded_labels = get_chn_labels(channels_tsv, labels)
+            # Number of samples
+            N = reader.getNSamples()[0]
         # create a process context. Refer to:
         # https://github.com/dask/dask/issues/3759
         ctx = get_context("spawn")
@@ -411,12 +401,11 @@ class cleanSEEG:
             data_list, newSrate = zip(
                 *pool.map(
                     partial(
-                        downsampling,
+                        downsampling_mne,
                         edf_file=self.edf_path,
-                        orig_srate=self.srate,
                         target_srate=target_srate,
                     ),
-                    channels,
+                    chn_labels,
                 )
             )
         # Reformatting to array
@@ -463,11 +452,10 @@ class cleanSEEG:
                 "EDF file with clean signal cannot be written without and appropiate out path"
             )
         # Open edf file
-        edf_in = pyedflib.EdfReader(self.edf_path)
-        # Extract labels
-        labels = edf_in.getSignalLabels()
-        chn_labels, discarded_labels = get_chn_labels(channels_tsv, labels)
-        try:
+        with pyedflib.EdfReader(self.edf_path) as edf_in:
+            # Extract labels
+            labels = edf_in.getSignalLabels()
+            chn_labels, discarded_labels = get_chn_labels(channels_tsv, labels)
             # Number of samples
             N = edf_in.getNSamples()[0]
             # Create signal list
@@ -477,53 +465,48 @@ class cleanSEEG:
                 id_ch = labels.index(chan)
                 chn_sig = edf_in.readSignal(id_ch)
                 signal.append(chn_sig)
-            edf_in.close()
-            # Convert signal to array
-            signal = np.vstack(signal)
-            # Remove line noise
-            print("Removing line noise")
-            clean = self.wrapper_PLI(signal)
-            print("PLI removal completed.")
-            # Write edfs if requested
-            if write_edf:
-                # Clean signal
-                # convert to list
-                clean_list = [clean[i, :] for i in range(clean.shape[0])]
-                if os.path.exists(out_edf_path):
-                    logging.warning(f"EDF file {out_edf_path} will be overwritten.")
-                create_EDF(
-                    self.edf_path,
-                    out_edf_path,
-                    self.processes,
-                    chn_labels=chn_labels,
-                    signal=clean_list,
-                )
-                del clean_list
-                self.clean_edf = out_edf_path
-            if return_report:
-                report = dict()
-                report['Method'] = self.methodPLI
-                report['Line frequency (Hz)'] = self.lineFreq
-                if self.methodPLI == "Cleanline":
-                    report['Bandwidth (Hz)'] = self.bandwidth
-                elif self.methodPLI == "NotchFilter":  # TODO: add bandwidth param
-                    report['Number of Harmonics'] = self.n_harmonics
-                elif self.methodPLI == "PLIremoval":
-                    report['Number of Harmonics'] = 3
-                    report['B0, Initial notch bandwidth of the frequency estimator'] = 100
-                    report['Binf, Asymptotic notch bandwidth of the frequency estimator'] = 0.01
-                    report['Bst, Rate of convergence to 95# of the asymptotic bandwidth Binf'] = 4
-                    report['P0, Initial settling time of the frequency estimator'] = 0.1
-                    report['Asymptotic settling time of the frequency estimator'] = 2
-                    report['Pst, Rate of convergence to 95# of the asymptotic settling time'] = 5
-                    report['W, Settling time of the amplitude and phase estimator'] = 2
-                    # Hardcoded for now
-                return clean, report
-            return clean
-        except:
-            edf_in.close()
-            print(traceback.format_exc())
-            raise Exception
+        # Convert signal to array
+        signal = np.vstack(signal)
+        # Remove line noise
+        print("Removing line noise")
+        clean = self.wrapper_PLI(signal)
+        print("PLI removal completed.")
+        # Write edfs if requested
+        if write_edf:
+            # Clean signal
+            # convert to list
+            clean_list = [clean[i, :] for i in range(clean.shape[0])]
+            if os.path.exists(out_edf_path):
+                logging.warning(f"EDF file {out_edf_path} will be overwritten.")
+            create_EDF(
+                self.edf_path,
+                out_edf_path,
+                self.processes,
+                chn_labels=chn_labels,
+                signal=clean_list,
+            )
+            del clean_list
+            self.clean_edf = out_edf_path
+        if return_report:
+            report = dict()
+            report['Method'] = self.methodPLI
+            report['Line frequency (Hz)'] = self.lineFreq
+            if self.methodPLI == "Cleanline":
+                report['Bandwidth (Hz)'] = self.bandwidth
+            elif self.methodPLI == "NotchFilter":  # TODO: add bandwidth param
+                report['Number of Harmonics'] = self.n_harmonics
+            elif self.methodPLI == "PLIremoval":
+                report['Number of Harmonics'] = 3
+                report['B0, Initial notch bandwidth of the frequency estimator'] = 100
+                report['Binf, Asymptotic notch bandwidth of the frequency estimator'] = 0.01
+                report['Bst, Rate of convergence to 95# of the asymptotic bandwidth Binf'] = 4
+                report['P0, Initial settling time of the frequency estimator'] = 0.1
+                report['Asymptotic settling time of the frequency estimator'] = 2
+                report['Pst, Rate of convergence to 95# of the asymptotic settling time'] = 5
+                report['W, Settling time of the amplitude and phase estimator'] = 2
+                # Hardcoded for now
+            return clean, report
+        return clean
 
     # Wrapper to manage different PLI methods
     def wrapper_PLI(self, signal):
@@ -594,12 +577,11 @@ class cleanSEEG:
             raise Exception(
                 "Please indicate the path to a tsv file with channels information."
             )  # Open edf file
-        edf_in = pyedflib.EdfReader(self.edf_path)
-        # Extract labels
-        elec_edf = edf_in.getSignalLabels()
-        # Begin by getting the position of the electrodes in RAS space
-        chn_labels, discarded_labels = get_chn_labels(channels_tsv, elec_edf)
-        try:
+        with pyedflib.EdfReader(self.edf_path) as edf_in:
+            # Extract labels
+            elec_edf = edf_in.getSignalLabels()
+            # Begin by getting the position of the electrodes in RAS space
+            chn_labels, discarded_labels = get_chn_labels(channels_tsv, elec_edf)
             # Number of samples
             N = edf_in.getNSamples()[0]
             ### THIS MUST BE CHANGED TO A MORE STANDARD APPROACH
@@ -623,98 +605,92 @@ class cleanSEEG:
                 id_ch = elec_edf.index(chan)
                 chn_sig = edf_in.readSignal(id_ch)
                 signal.append(chn_sig)
-            edf_in.close()
             # Convert signal to array
             signal = np.vstack(signal)
-            # Run cleaning
-            # First remove line noise
-            # print('Removing line noise')
-            # signal = self.wrapper_PLI(signal)
-            # print('PLI removal completed.')
+        # Run cleaning
+        # First remove line noise
+        # print('Removing line noise')
+        # signal = self.wrapper_PLI(signal)
+        # print('PLI removal completed.')
 
-            # Second, identify noisy segments and highpass filter the data
-            if self.noiseDetect and return_interpolated:
-                clean, interpolated, df_epochs, filt_params = self.noiseDetect_raw(
-                    signal, elec_edf, channels_tsv, return_interpolated=True, verbose=verbose
-                )
-                # Update number of removed elements after autoreject
-                n_removed.append(clean.shape[-1] - interpolated.shape[-1])
-            elif self.noiseDetect:
-                clean, df_epochs, filt_params = self.noiseDetect_raw(
-                    signal, elec_edf, channels_tsv, return_interpolated=False, verbose=verbose
-                )
-            else:
-                clean, filt_params = self.noiseDetect_raw(
-                    signal, elec_edf, channels_tsv, return_interpolated=False, verbose=verbose
-                )
+        # Second, identify noisy segments and highpass filter the data
+        if self.noiseDetect and return_interpolated:
+            clean, interpolated, df_epochs, filt_params = self.noiseDetect_raw(
+                signal, elec_edf, channels_tsv, return_interpolated=True, verbose=verbose
+            )
+            # Update number of removed elements after autoreject
+            n_removed.append(clean.shape[-1] - interpolated.shape[-1])
+        elif self.noiseDetect:
+            clean, df_epochs, filt_params = self.noiseDetect_raw(
+                signal, elec_edf, channels_tsv, return_interpolated=False, verbose=verbose
+            )
+        else:
+            clean, filt_params = self.noiseDetect_raw(
+                signal, elec_edf, channels_tsv, return_interpolated=False, verbose=verbose
+            )
 
-            # Write edfs if requested
-            if write_edf_clean:
-                # Clean signal
-                # convert to list
-                clean_list = [clean[i, :] for i in range(clean.shape[0])]
-                if os.path.exists(out_edf_path_clean):
-                    logging.warning(
-                        f"EDF file {out_edf_path_clean} will be overwritten."
-                    )
-                create_EDF(
-                    self.edf_path,
-                    out_edf_path_clean,
-                    self.processes,
-                    chn_labels=chn_labels,
-                    signal=clean_list,
+        # Write edfs if requested
+        if write_edf_clean:
+            # Clean signal
+            # convert to list
+            clean_list = [clean[i, :] for i in range(clean.shape[0])]
+            if os.path.exists(out_edf_path_clean):
+                logging.warning(
+                    f"EDF file {out_edf_path_clean} will be overwritten."
                 )
-                del clean_list
-                self.clean_edf = out_edf_path_clean
+            create_EDF(
+                self.edf_path,
+                out_edf_path_clean,
+                self.processes,
+                chn_labels=chn_labels,
+                signal=clean_list,
+            )
+            del clean_list
+            self.clean_edf = out_edf_path_clean
 
-            if write_edf_int and self.noiseDetect:
-                # Interpolated signal
-                logging.critical(
-                    "Currently, writing the EDF file for the interpolated signal is not supported."
-                )
-                # convert to list
-                # int_list = [interpolated_sig[i,:] for i in range(interpolated_sig.shape[0])]
-                # if os.path.exists(out_edf_path_int):
-                #     logging.warning(f"EDF file {out_edf_path_int} will be overwritten.")
-                # create_EDF(self.edf_path, out_edf_path_int, self.processes, chn_labels = chn_labels, signal = int_list, n_removed = n_removed)
-                # del int_list
-                # self.inter_edf = out_edf_path_int
+        if write_edf_int and self.noiseDetect:
+            # Interpolated signal
+            logging.critical(
+                "Currently, writing the EDF file for the interpolated signal is not supported."
+            )
+            # convert to list
+            # int_list = [interpolated_sig[i,:] for i in range(interpolated_sig.shape[0])]
+            # if os.path.exists(out_edf_path_int):
+            #     logging.warning(f"EDF file {out_edf_path_int} will be overwritten.")
+            # create_EDF(self.edf_path, out_edf_path_int, self.processes, chn_labels = chn_labels, signal = int_list, n_removed = n_removed)
+            # del int_list
+            # self.inter_edf = out_edf_path_int
 
-            # Write tsv with noise data
-            if write_tsv and self.noiseDetect:
-                if os.path.exists(out_tsv_path):
-                    logging.warning(f" tsv file {out_tsv_path} will be overwritten.")
-                df_epochs.to_csv(out_tsv_path, index=False, sep="\t")
-            
-            # Report
-            # First get the table with means of signals
-            df_report = pd.DataFrame({
-                'Channel': chn_labels,
-                'Original mean': np.mean(signal, axis=1),
-                'New mean': np.mean(clean, axis=1)
-            })
-            # Now the report with method for detrending 
-            report = {
-                'Method used': self.RmTrendMethod,
-                'Discarded channels': discarded_labels
-            }
-            if self.highpass is not None:
-                report['Transition band (Hz)'] = self.highpass
-            # Finally plot the filter if exists
-            if len(filt_params)>0:
-                plot_filter(filt_params[0], filt_params[1], os.path.dirname(out_edf_path_clean), self.highpass)
-            # Return
-            if self.noiseDetect and return_interpolated:
-                return clean, interpolated, df_epochs, df_report, report
-            elif self.noiseDetect:
-                return clean, df_epochs, df_report, report
-            # Else, just return the filtered signal
-            return clean, df_report, report
-                
-        except:
-            edf_in.close()
-            print(traceback.format_exc())
-            raise Exception
+        # Write tsv with noise data
+        if write_tsv and self.noiseDetect:
+            if os.path.exists(out_tsv_path):
+                logging.warning(f" tsv file {out_tsv_path} will be overwritten.")
+            df_epochs.to_csv(out_tsv_path, index=False, sep="\t")
+        
+        # Report
+        # First get the table with means of signals
+        df_report = pd.DataFrame({
+            'Channel': chn_labels,
+            'Original mean': np.mean(signal, axis=1),
+            'New mean': np.mean(clean, axis=1)
+        })
+        # Now the report with method for detrending 
+        report = {
+            'Method used': self.RmTrendMethod,
+            'Discarded channels': discarded_labels
+        }
+        if self.highpass is not None:
+            report['Transition band (Hz)'] = self.highpass
+        # Finally plot the filter if exists
+        if len(filt_params)>0:
+            plot_filter(filt_params[0], filt_params[1], os.path.dirname(out_edf_path_clean), self.highpass)
+        # Return
+        if self.noiseDetect and return_interpolated:
+            return clean, interpolated, df_epochs, df_report, report
+        elif self.noiseDetect:
+            return clean, df_epochs, df_report, report
+        # Else, just return the filtered signal
+        return clean, df_report, report
 
     def noiseDetect_raw(
         self, raw, electrodes_edf, channels_tsv, return_interpolated=False, verbose=False
