@@ -30,7 +30,7 @@ rule bids_validator:
     output:
         out_txt = 'bids_validator_results.txt'
     params:
-        container = config['singularity']['graham']['bids_validator'],
+        container = config['singularity']['graham']['bids_validator'] if config['graham'] else config['singularity']['docker']['bids_validator'],
         flags = config['bids_validator_flags'],
         mode = 'iEEG'
     shell:

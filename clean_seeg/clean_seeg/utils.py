@@ -627,10 +627,12 @@ def dss(c0, c1):
 
     # apply PCA and whitening to the biased covariance
     N = np.diag(np.sqrt(1 / (eigvals0)))
+    # This operation re-expresses the covariance matrix in the basis of its eigenvectors,
+    # isolating its eigenvalues along the diagonal. Based on the paper c2==c1
     c2 = np.transpose(N) @ np.transpose(eigvecs0) @ c1 @ eigvecs0 @ N
 
     # matrix to convert PCA-whitened data to DSS
-    [eigvals1, eigvecs1] = eigen(c2)
+    [eigvals1, eigvecs1] = eigen(c2) # eigvecs1==Q
 
     # DSS matrix (raw data to normalized DSS)
     todss = eigvecs0 * N * eigvecs1
@@ -647,6 +649,7 @@ def crosscov(x, y):
 
 
 def denoise_PCA(x, ref):
+    # x: time x chns
     mnx = np.mean(x, axis=0)
     x = x - mnx
 
@@ -947,7 +950,7 @@ def testSignificantFrequencies(data, fPassBand, srate, p, padding, tapers):
     J = mtfftc(data, tapers, nfft, srate)  # tapered fft of data - f x K x C
     Jp = J[findx, :, :][
         :, Keven, :
-    ]  # drop the even ffts and restrict fft to specified frequency grid - f x K x C
+    ]  # drop the odd ffts and restrict fft to specified frequency grid - f x K x C
     tapers = np.repeat(
         tapers[:, :, np.newaxis], C, axis=2
     )  # add channel indices to the tapers - t x K x C

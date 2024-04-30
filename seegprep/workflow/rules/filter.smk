@@ -11,36 +11,22 @@ def out_dir_filt():
 def filter_inputs():
     # If run_all or downsample are called
     if config['run_all'] or config['downsample']:
-        #print('downsample before filter')
         return rules.downsample.output.out_edf
     # Else if filter is executed after epoch extraction
     elif config['epoch']:
         return rules.get_epoch_files.output.out_edf
     # Else if filter is the first step to execute
     elif config['filter']:
-        #print('filter is first')
         return inputs.path['edf']
     # run_all by default
     else:
-        #print('default filter')
         return rules.downsample.output.out_edf
 
-# Get transform file
-def get_tf(wildcards):
-    if config['t1_to_coords_tfm'] != False:
-        tf_path = expand(inputs.path['tf'], **wildcards)[0]
-        if os.path.exists(tf_path):
-            return tf_path
-    return None
-
-#print(config['freesurf_dir'])
 # Rule
 rule filter_data:
     input:
         edf = filter_inputs(),
         chn_tsv = inputs.path['channels'],
-        # Other parameters
-        # t1 = 'derivatives/freesurfer/sub-{subject}/mri/T1.mgz',
     group:
         "subj"
     output:

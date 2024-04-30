@@ -2,8 +2,6 @@ bids_dir: '/path/to/bids_dir'
 output_dir: '/path/to/output_dir'
 
 # Resources
-processes: 16
-memory: 64000
 local_scratch: '/tmp'
 local_scratch_env: 'SLURM_TMPDIR'
 
@@ -98,41 +96,36 @@ event: ['awake trigger', 'duration', 240] # 4 min 'awake trigger'
 # Default: 200 Hz
 target_srate: 1024
 
-
-# 2. Parameters for filtering step:
+# 2. Parameters for detrending step:
 # (2.a) Detrend method 
 # Options: 'LinearDetrend','HighPass' (default), 'Demean'
 detrend_method: 'HighPass'
 
-# (2.b) Power line interference removal method
+# (2.b) Transition band of high pass filter used in detrending step (if selected)
+highpass: [0.1, 0.2]
+
+# 3. Parameters for PLI attenuation
+# (3.a) Power line interference removal method
 # Options: 'Cleanline', 'Zapline', 'NotchFilter' (default), 'PLIremoval'
 methodPLI: 'Cleanline'
 
-# (2.c) Electrical grid fundamental frequency
+# (3.b) Electrical grid fundamental frequency
 # Default: 60 Hz  
 lineFreq: 60
 
-# (2.d) Bandwidth for Notch filter (TODO) or Cleanline
+# (3.c) Bandwidth for Notch filter (TODO) or Cleanline
 # Note: in 'Cleanline', the bandwidth represents the frequency range 
 # (around the theoretical fundamental and harmonic frequencies) in which
 # to search for possible peaks associated with line noise. 
 # Default: 4 (ex: if lineFreq=60, the range would go from 58 to 62)
 bandwidth: 8
 
-# (2.e) Number of harmonics to remove when using Notch Filter
+# (3.d) Number of harmonics to remove when using Notch Filter
 # Default: 1 (only removes fundamental frequency)
 n_harmonics: 1
 
-# (2.g) Transition band of high pass filter used in detrending step (if selected)
-highpass: [0.1, 0.2]
-
-# (2.i) Length of epochs to run Autoreject (in seconds).
-# Default: 5 seconds
-epoch_length: 5 
-
-
-# 3. Parameters for region identification step
-# (3.1) Boolean to discard signals from electrodes located in white matter or 
+# 4. Parameters for region identification step
+# (4.1) Boolean to discard signals from electrodes located in white matter or 
 # 'unknown' region
 # Default: True (discards the signals)
 discard_wm_un: True
@@ -146,14 +139,8 @@ vol_version: True
 # Default: ['type', 'label', 'x', 'y', 'z', 'group'] or None (both options are equivalent)
 tsv_cols: ['type', 'label', 'x', 'y', 'z', 'orig_group']
 
-# Space to identify regions: 'subject' or 'MNI'
-space_regions: 'MNI'
 
-t1_to_coords_tfm: False 
-# Transform is not required in my case as I'm using T1w.nii.gz file, which is always in
-# the same position as the electrodes coordinates (contrast space)
-
-# Data resources
+# Color table required to asign labels for each value in the parcellation file
 colortable: /scratch/mcesped/code/MNI_Registration/registration_workflow/resources/tpl-MNI305/atlas/FreeSurferColorLUT.tsv
 
 # QC
@@ -242,38 +229,15 @@ parse_args:
     default: false
     action: store_true
 
-  --anat:
-    help: 'Segmentation and preprocessing of T1w.'
-    default: false
-    action: store_true
-
   --graham:
     help: 'Use containers on compute canada graham.'
     default: false
     action: store_true
-  
-  --fs_license:
-    help: 'Provide path to freesurfer license text file.'
-    default: false
-    required: false
-    nargs: 1
- # custom command-line parameters can then be added, these will get added to the config
- # below is an example to override config['bet_frac']
-#   --smoothing_fwhm:
-#       nargs: '+'
-#       required: True
-
-
-# #--- workflow specific configuration -- below is just an example:
 
 
 #singularity containers
 singularity:
     graham:
-      diffparc: '/project/ctb-akhanf/akhanf/singularity/bids-apps/khanlab_diffparc-deps_v0.1.0-fix.sif'
-      fmriprep: '/project/6050199/akhanf/singularity/bids-apps/poldracklab_fmriprep_20.1.1.sif' 
       bids_validator: '/scratch/mcesped/containers/validator_latest.sif'
     docker:
-      diffparc: 'docker://khanlab/diffparc-deps:v0.1.0-fix'
-      fmriprep: 'docker://nipreps/fmriprep:22.0.1'
       bids_validator: 'docker://bids/validator:latest'

@@ -837,6 +837,10 @@ def create_epoch_EDF(edf_file, timestamp_init, n_val, out_path, processes):
             t_0 = t[t_init_id]
             # Headers for unipolar case
             headers = edf_in.getSignalHeaders()
+            # Other info
+            start_date = edf_in.getStartdatetime()
+            data_record_dur = int(edf_in.datarecord_duration * 100000)
+
         
         # Extract channel information:
         chn_lists = range(len(labels))
@@ -870,7 +874,6 @@ def create_epoch_EDF(edf_file, timestamp_init, n_val, out_path, processes):
         # Start writing
         with pyedflib.EdfWriter(out_path, len(labels), file_type=pyedflib.FILETYPE_EDFPLUS) as writer:
             # Change the start date of the header
-            start_date = edf_in.getStartdatetime()
             delta = datetime.timedelta(seconds=t_0)
             new_date = start_date + delta
             header['startdate']=new_date
@@ -878,7 +881,7 @@ def create_epoch_EDF(edf_file, timestamp_init, n_val, out_path, processes):
             # f.datarecord_duration gives the value is sec and setDatarecordDuration receives it in units
             # of 10 ms. Therefore: setDatarecordDuration = datarecord_duration*10^6 / 10
             writer.setDatarecordDuration(
-                int(edf_in.datarecord_duration * 100000)
+                data_record_dur
             )  # This actually is used to set the sample frequency
             writer.writeAnnotation(0, -1, "Recording starts")
             # Edit headers to make them compliant with edf files

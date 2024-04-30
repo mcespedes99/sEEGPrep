@@ -18,6 +18,8 @@ from scipy.signal import kaiserord, firwin, filtfilt
 
 def clean_drifts(signal,srate,Transition=[0.5, 1],Attenuation=80):
     
+    # Recovered from https://github.com/sccn/clean_rawdata/
+
     # Removes drifts from the data using a FIR high-pass filter.
     # signal = clean_drifts(signal,Transition)
     #

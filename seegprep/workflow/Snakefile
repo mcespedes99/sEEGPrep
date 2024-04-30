@@ -91,14 +91,12 @@ if (not config['run_all']) and (not config['epoch']) and (not config['downsample
 # print(inputs.zip_lists['annotations'])
 ## Input definition
 if (config['epoch'] or config['run_all'] or run_all) and isinstance(config['event'][0], str): # If getting through annotations
-    print('a')
     # Get filtered ziplist based on annotations of interest if extracting epochs
     input_ziplist, number_clips = get_inputs(inputs.path['events'], **inputs.zip_lists['events'])
     # Add clip and rec to wildcards of outputs
     out_edf_wc = copy.deepcopy(inputs.wildcards['edf'])
     out_edf_wc['clip'] = '{clip}'
 else:
-    print('b')
     input_ziplist = inputs.zip_lists['edf']
     # Add clip and rec to wildcards of outputs
     out_edf_wc = copy.deepcopy(inputs.wildcards['edf'])

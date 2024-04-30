@@ -9,21 +9,17 @@ def region_id_inputs():
         return rules.rereference.output.out_edf
     # Else if filter is called
     elif config['filter']:
-        #print('filter before regionsID')
         return rules.filter_data.output.out_edf
     # Else if downsample is called
     elif config['downsample']:
-        #print('filter before regionsID')
         return rules.downsample.output.out_edf
     # Else if filter is executed after epoch extraction
     elif config['epoch']:
         return rules.get_epoch_files.output.out_edf
     # Else if regionsID is called but not any of the previous rules
     elif config['regions_id']:
-        #print('RegionsID is first')
         return inputs.path['edf']
     else: # Default: run_all
-        #print('reref before regionsID (run all)')
         return rules.PLI_reject.output.out_edf
 
 # Rule

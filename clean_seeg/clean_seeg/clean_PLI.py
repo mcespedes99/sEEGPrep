@@ -209,7 +209,7 @@ def zapline(x, fline, srate, nremove=1, p={}, filt=1):
     #  y: denoised data
     #  yy: artifact
     #
-    #  x: data
+    #  x: data (time x channels)
     #  fline: line frequency (normalized to sr)
     #  nremove: number of components to remove [default: 1]
     #  p: additional parameters:
@@ -269,20 +269,13 @@ def zapline(x, fline, srate, nremove=1, p={}, filt=1):
     # This just rotates the data according to the principal components
     xxxx = (x_rem) @ (eigvecs) 
 
-    print('caca')
     # DSS to isolate line components from residual:
     nHarmonics = np.floor((1/2)/fline);
     [c0,c1] = utils.bias_fft(xxxx, fline*np.arange(1,nHarmonics+1), p['nfft']);
-    # print('c0')
-    # print(c0)
-    # print('c1')
-    # print(c1)
-    print('2')
     todss = utils.dss(c0,c1);
-    print('3')
     # This would be the projection of the noise to the main component of the biased
     # noise, which should represent the line noise.
-    xxxx= xxxx @ todss[:,0:nremove] # line-dominated components. 
+    xxxx= xxxx @ todss[:,0:nremove] # line-dominated components. xxxx == LXW from paper 
     # return xxxx
     # Denoise
     xxx = utils.denoise_PCA(x-xx,xxxx); # project them out
@@ -311,7 +304,6 @@ def cleanline(EEG, srate, processes=None, channels = [], linefreq = [60], p=0.01
             if i*lf < srate/2:
                 linefreq.append(i*lf)
         del lf
-    print(linefreq)
     # Set channels if not set
     if len(channels)==0:
         sz = EEG.shape
