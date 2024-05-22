@@ -100,14 +100,23 @@ def bipolar_info(id, dict_key, channels_dict, elec_pos):
 def create_bipolars(electrodes_df, electrodes_edf, processes, compare_edf=True):
     channels = {}
     # Try to options of labels
-    pattern1 = r"([A-Z0-9]+[-]+)(\d+)$"  # for electrodes like 'LOpS-10' or 'LOpS1-10'
-    pattern2 = r"([A-Z]+[-]*)(\d+)$"  # for electrodes like 'LOpS10'
+    # 1st: for electrodes like 'LOpS-10' or 'LOpS1-10'
+    # 2nd: for electrodes like 'LOpS10'
+    pattern = [
+        r"([A-Z0-9]+[-]+)(\d+)$",
+        r"([A-Z]+[-]*)(\d+)$",
+        r"([A-Z]+[0-9]+[A-Z]+[-]*)(\d+)$",
+    ]
     # Extract channels info
     for electrode in electrodes_df["name"].values:
-        if not compare_edf or (compare_edf and (electrode in electrodes_edf)):
-            match = re.match(pattern1, electrode, re.IGNORECASE)
+        if electrode in electrodes_edf:
+            match = None
+            n = 0
+            while (not match) and (n < len(pattern)):
+                match = re.match(pattern[n], electrode, re.IGNORECASE)
+                n += 1
             if not match:
-                match = re.match(pattern2, electrode, re.IGNORECASE)
+                raise Exception(f"Channel {electrode} did not match any of the regex.")
             if match.group(1) in channels.keys():
                 channels[match.group(1)].append(match.group(2))
             else:

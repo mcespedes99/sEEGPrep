@@ -5,3 +5,4 @@ Results/
 clean_seeg/__pycache__/*
 backup/
 .vscode/
+*.mat
