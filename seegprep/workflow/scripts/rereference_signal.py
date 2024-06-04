@@ -23,8 +23,7 @@ def main():
 
         # Apply rereferencing
         df_reref, report_reref = seegTF.rereference(electrodes_tsv,
-                                                    out_edf,
-                                                    write_tsv = True,
+                                                    out_edf_path = out_edf,
                                                     out_tsv_path = out_tsv, 
                                                     return_report=True)
         # Save

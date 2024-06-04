@@ -1,14 +1,8 @@
 from .utils import (
-    get_montage,
-    get_chn_labels,
     plot_filter,
-    get_chn_positions,
-    downsampling,
     downsampling_mne,
     remove_trend,
 )
-from .clean_autoreject import create_mne_epochs, run_autoreject
-from .clean_flatlines import clean_flatlines
 from .clean_PLI import removePLI_chns, zapline, cleanline, notch_filt
 from .data_manager import (
     create_EDF,
@@ -18,26 +12,74 @@ from .data_manager import (
     get_chn_info,
     create_epoch_EDF,
 )
+from .edf_utils import (
+    adjust_n_samples,
+    find_timestamps,
+    extract_signal
+)
+from .val_utils import (
+    get_chn_labels
+)
 import logging
 import pandas as pd
-
+from typing import Literal, List, Tuple, Union, Dict
+import pyedflib
+import shutil
+import os
+import re
+import snakebids
+import bids
+import numpy as np
+from multiprocessing.pool import Pool
+from multiprocessing import get_context
+from functools import partial
+import json
 
 class cleanSEEG:
+    """
+    Main class to clean SEEG (Stereo-ElectroEncephaloGraphy) data.
+
+    Attributes:
+        edf_path (str): Path to the .edf file containing SEEG data.
+        RmTrendMethod (str): Method for removing trends. Options are "HighPass", "LinearDetrend", "Demean".
+        methodPLI (str): Method for power line interference removal. Options are "Cleanline", "NotchFilter", "PLIremoval", "Zapline".
+        lineFreq (int): Frequency of the power line interference.
+        bandwidth (int): Bandwidth for filtering.
+        n_harmonics (int): Number of harmonics to consider for removal.
+        highpass (List[float]): Highpass filter transition band.
+        tfm (List[Tuple[str, bool]]): List of transformations to apply to the contacts coordinates, each defined by a tuple with a string
+        identifier and a boolean flag to define whether or not to invert (if set to True, the transform is inverted).
+        processes (Optional[int]): Number of processes to use for parallel computation.
+    """
+
     def __init__(
         self,
-        edf_path,
-        RmTrendMethod="HighPass",
-        methodPLI="Zapline",
-        lineFreq=60,
-        bandwidth=4,
-        n_harmonics=3,
-        noiseDetect=True,
-        highpass=[0.5, 1],
-        tfm=[],
-        epoch_autoreject=5,  # Epoch length for autoreject
-        processes=None,
-    ):
-        import pyedflib
+        edf_path: Union[str, os.PathLike],
+        RmTrendMethod: Literal["HighPass", "LinearDetrend", "Demean"] = "HighPass",
+        methodPLI: Literal["Cleanline", "NotchFilter", "PLIremoval", "Zapline"] = "Zapline",
+        lineFreq: int = 60,
+        bandwidth: int = 4,
+        n_harmonics:  int = 3,
+        highpass: List[float] =[0.5, 1],
+        tfm: List[Tuple[str, bool]] = [],
+        processes: int = None,
+    ) -> None:
+        """
+        Initializes the cleanSEEG instance with the specified parameters.
+
+        Args:
+            edf_path (Union[str, os.PathLike]): Path to the .edf file containing SEEG data.
+            RmTrendMethod (Literal["HighPass", "LinearDetrend", "Demean"]): Method for removing trends. Defaults to "HighPass".
+            methodPLI (Literal["Cleanline", "NotchFilter", "PLIremoval", "Zapline"]): Method for power line interference removal. Defaults to "Zapline".
+            lineFreq (int): Frequency of the power line interference. Defaults to 60.
+            bandwidth (int): Bandwidth for filtering. Defaults to 4.
+            n_harmonics (int): Number of harmonics to consider for removal. Defaults to 3.
+            highpass (List[float]): Highpass filter transition band frequencies. Defaults to [0.5, 1]. If set to None, no filtering is applied.
+            tfm (List[Tuple[str, bool]]): List of transformations to apply to each contact coordinate to move it to the parcellation space,
+            each defined by a tuple with a string identifier and a boolean flag  to define whether or not to invert (if set to True, the transform is inverted).
+            Defaults to an empty list.
+            processes (Optional[int]): Number of processes to use for parallel computation. Defaults to None.
+        """
 
         self.edf_path = edf_path
         self.RmTrendMethod = RmTrendMethod
@@ -45,12 +87,10 @@ class cleanSEEG:
         self.lineFreq = lineFreq
         self.bandwidth = bandwidth
         self.n_harmonics = n_harmonics
-        self.noiseDetect = noiseDetect
         self.highpass = highpass  # Set to None to shut down
-        self.tfm = tfm  # has to be a list of tuple with format: (path, invert), with 'path' as str or tfm and invert as boolean
-        self.epoch_autoreject = epoch_autoreject
+        self.tfm = tfm  
         self.processes = processes
-        # Extra params
+        # Extra params to allow computation of steps in series
         self.reref_chn_list = []
         self.reref_chn_df = []
         self.inter_edf = None
@@ -58,84 +98,106 @@ class cleanSEEG:
         self.subject = (None,)
         self.subjects_dir = None
 
-        # Find sample rate
+        # Find sample rate: Requires pyedflib <= 0.1.30
         with pyedflib.EdfReader(edf_path) as edf_in:
             self.srate = edf_in.getSampleFrequencies()[0] / edf_in.datarecord_duration
-
+    
+    
     # Epoch extraction
     def extract_epochs(
         self,
-        n_samples=None,
-        event_dur=None,
-        event_start=None,
-        out_root=None,
-        out_files=None,
-        tmpdir=None,
-        snakemake=False,
-        return_report=True
-    ):
-        import pyedflib
-        import shutil
-        import os
-        import re
-        import snakebids
-        import bids
-        import numpy as np
+        n_samples: int = None,
+        event_dur: float =None,
+        event_start: Union[str, int] = None,
+        out_root: Union[str, os.PathLike] = None,
+        out_files: Union[List[str], List[os.PathLike]] = None,
+        tmpdir: Union[str, os.PathLike] = None,
+        snakemake: bool = False,
+        return_report: bool = True
+    ) -> Union[pd.DataFrame, None] :
+        """
+        Extract epochs from EDF files based on specified start positions and durations.
 
-        assert n_samples or event_dur
-        # json obj with report info
+        This function extracts clips from EDF files given an initial position (specified by annotations or an index) 
+        and a duration (either in seconds or samples). It produces EDF files with the corresponding epochs and can 
+        return a small report summarizing the events found.
+
+        Parameters
+        ----------
+        n_samples : int, optional
+            Number of samples to extract. If not specified, `event_dur` must be provided.
+        event_dur : float, optional
+            Duration of the event in seconds. Used to calculate `n_samples` if not provided.
+        event_start : int or str, optional
+            Starting point of the event. Can be an index or a label to look for an annotation in the EDF file.
+            If not given, the EDF is splitted into multiple epochs of the specified samples or duration.
+        out_root : str, optional
+            Root directory to save the output EDF files. It is used to create the output files names
+            if out_files is set to None.
+        out_files : list of str or os.PathLike, optional
+            List of output file paths. If not specified, files are named automatically using out_root.
+        tmpdir : str or os.PathLike, optional
+            Temporary directory to use for intermediate file storage.
+        snakemake : bool, optional
+            If True, modify the suffix of the output files to include '_tmp'.
+        return_report : bool, optional
+            If True, return a report summarizing the extracted epochs.
+
+        Returns
+        -------
+        pandas.DataFrame or None
+            DataFrame containing the report with columns for 'Epoch start event', 'Relative start time', 
+            'Duration', and 'Clip number'. If `return_report` is False, returns None.
+        
+        Raises
+        ------
+        ValueError
+            If neither `n_samples` nor `event_dur` is provided.
+        
+        Notes
+        -----
+        This function assumes the EDF file is accessible and readable. Make sure to handle file paths and permissions appropriately.
+        
+        Examples
+        --------
+
+        """
+        if not n_samples and not event_dur:
+            raise ValueError("Either n_samples or event_dur must be provided")
+         
+        # Initialize report
         report = {
             'Epoch start event': [],
             'Relative start time': [],
             'Duration': [],
-            'Clip number' : []
+            'Clip number': []
         }
+        
         with pyedflib.EdfReader(self.edf_path) as f:
-            # Number of samples in edf
+            # Number of samples in edf. Use the samples from the first channel as reference.
             N = f.getNSamples()[0]
-            # Get number of samples if not defined
-            # Sampling rate:
+            # Sampling rate. Use the samples from the first channel as reference.
             srate = f.getSampleFrequencies()[0] / f.datarecord_duration
+
+
             if not n_samples:
                 # Get number of samples based on event duration
                 n_samples = int(event_dur * srate)
             # Check than n_samples is not bigger than N
             if n_samples > N:
-                print('Number of samples bigger than number of points in file, changing to the max.\n', flush=True)
+                logging.warning('Number of samples bigger than number of points in file, changing to the max.')
                 n_samples = N
-            # Adjust n_samples depending on the datarecord duration and the number of samples in file
-            remainder = n_samples % f.getSampleFrequencies()[0]
-            if remainder != 0:
-                n_samples += f.getSampleFrequencies()[0] - remainder
             
-            # Find timestamps
-            t = np.arange(0, N) / srate
-            if event_start is not None:
-                # Two possibilities: label or index
-                if isinstance(event_start, int):
-                    time_stamps_init = t[event_start]
-                else:    
-                    id = [
-                        value[0]
-                        for value in enumerate(f.readAnnotations()[2])
-                        if re.match(event_start, value[1], re.IGNORECASE)
-                    ]
-                    # Create df with annotations
-                    onset_list = f.readAnnotations()[0]
-                    # Find time stamps where the 'awake trigger' event is happening
-                    time_stamps_init = onset_list[id]
-                # Make sure it's a list
-                if not hasattr(time_stamps_init, '__iter__'):
-                    time_stamps_init = [time_stamps_init]
-            else:
-                time_stamps_init = t[::n_samples]
+            
+            # Adjust n_samples depending on the datarecord duration and the number of samples in file
+            # Use the samples from the first channel as reference.
+            n_samples = adjust_n_samples(n_samples, f)
+            time_stamps_init = find_timestamps(event_start, f, srate, n_samples)
 
-        # print(time_stamps)
         # Copy file to local scratch if possible
         new_edf = None
         if tmpdir != None and os.path.exists(tmpdir):
             # Copy file to local scratch
-            print("here")
             file_name = os.path.basename(self.edf_path)
             new_edf = os.path.join(tmpdir, file_name)
             shutil.copy(self.edf_path, new_edf)
@@ -148,252 +210,80 @@ class cleanSEEG:
         else:
             entities["suffix"] = entities["suffix"] + entities["extension"]
         del entities["extension"]
-        # Add 'task'
+        # Add 'clip' entity
         entities["rec"] = "clip"
-        # Here call function to create new EDF file
-        for index, event_timestamp in enumerate(time_stamps_init):
-            if out_files is None:
-                # New file name
-                entities["clip"] = f"{index+1:02}"
-                out_edf_path = os.path.basename(
-                    snakebids.bids(root=out_root, **entities)
-                )
-                out_edf_path = os.path.join(out_root, out_edf_path)
-                print(out_edf_path)
-            else:
-                # Filter based on regex
-                reg = re.compile(f"clip-{index+1:02}")
-                out_edf_path = list(filter(reg.search, out_files))[0]
-            if new_edf == None:
-                time_init, duration = create_epoch_EDF(
-                                        self.edf_path,
-                                        event_timestamp,
-                                        n_samples,
-                                        out_edf_path,
-                                        self.processes,
-                )
-            else:
-                print("aqui")
-                time_init, duration = create_epoch_EDF(
-                    new_edf, event_timestamp, n_samples, out_edf_path, self.processes
-                )
-            # Save report
-            report["Epoch start event"].append(event_start)
-            report['Relative start time'].append(time_init)
-            report["Duration"].append(duration)
-            report['Clip number'].append(f"clip-{index+1:02}")
-        if new_edf != None:
-            print("delete")
+
+        # Create new EDF files for each event
+        report = self._create_epoch_edf_files(time_stamps_init,
+                                             n_samples,
+                                             out_files,
+                                             out_root,
+                                             new_edf,
+                                             entities,
+                                             report,
+                                             event_start)
+
+        
+        if new_edf is not None:
             os.remove(new_edf)
+        
         if return_report:
             return pd.DataFrame(report)
 
-    # Reference function
-    def rereference(
-        self,
-        electrodes_tsv,
-        out_edf_path,
-        write_tsv=False,
-        out_tsv_path=None,
-        return_report=True,
-    ):
-        # TODO: include use_clean feature!
-        import os
-        import pyedflib
-        import numpy as np
-
-        # Manage some errors:
-        if write_tsv and out_tsv_path == None:
-            raise Exception("To write the tsv file, please indicate an output path.")
-        if electrodes_tsv == None:
-            raise Exception(
-                "Please indicate the path to a tsv file with channels information."
-            )
-        # TODO: separate rerefering from label map creation
-        print("Running rereference")
-        # Extract info about electrodes positions
-        elec_pos = pd.read_csv(electrodes_tsv, sep="\t")
-        with pyedflib.EdfReader(self.edf_path) as reader:
-            # Extract channels present in edf file (might not be all)
-            elec_edf = reader.getSignalLabels()
-        # First check with electrodes are in electrodes.tsv and EDF
-        _, discarded_labels = get_chn_labels(electrodes_tsv, elec_edf)
-        assert len(discarded_labels)<len(elec_pos) # If not, it means the edf if wrong format or it's already bipolar
-        # Create bipolar combinations
-        bipolar_channels, bipolar_info_df = create_bipolars(
-            elec_pos, elec_edf, self.processes
-        )
-        # Save values in the class
-        self.reref_chn_list = bipolar_channels
-        self.reref_chn_df = bipolar_info_df
-        # Write tsv
-        if write_tsv:  # and not os.path.exists(out_tsv_name):
-            if os.path.exists(out_tsv_path):
-                logging.warning(f"tsv file {out_tsv_path} will be overwritten.")
-            bipolar_info_df.to_csv(out_tsv_path, index=False, sep="\t")
-
-        # print(bipolar_channels)
-
-        # Create new EDF file
-        if os.path.exists(out_edf_path):
-            logging.warning(f"edf file {out_edf_path} will be overwritten.")
-        create_EDF(
-            self.edf_path, out_edf_path, self.processes, chn_labels=bipolar_channels
-        )
-        self.rereference_edf = out_edf_path
-        if return_report:
-            bipolar_combs = {
-                'Bipolar channel': [values[0] for values in bipolar_channels],
-                'Unipolar channels': [values[1:] for values in bipolar_channels]
-            }
-            report = {
-                'Discarded channels': discarded_labels
-            }
-            return pd.DataFrame(bipolar_combs), report
-
-    def identify_regions(
-        self,
-        electrodes_tsv,
-        aparc_aseg_path,
-        colortable_file,  # colortable has to be a tsv with at least index, name
-        reference, # 
-        use_reref=True,
-        write_tsv=False,
-        out_tsv_path=None,
-        discard_wm_un=False,
-        write_edf=False,
-        out_edf_path=None,
-        vol_version=False,
-        json_out=None,
-        mask_out=None, # to save mask
-        return_report=True
-    ):
-        import os
-        import pyedflib
-        import json
-
-        assert reference in ['bipolar', 'unipolar']
-
-        # Manage exception
-        if electrodes_tsv == None:
-            raise Exception(
-                "Please indicate the path to a tsv file with channels information."
-            )
-        # discard_wm_un discards white matter and unknown from edf file (not from csv)
-        # Manage a few exceptions
-        if write_edf and out_edf_path == None:
-            raise Exception(
-                "Please indicate a value for out_edf_path or set write_edf to False."
-            )
-
-        if use_reref:
-            if len(self.reref_chn_list) == 0 or len(self.reref_chn_df) == 0:
-                raise Exception(
-                    "Please run rereference first or set use_reref to False."
-                )
-            chn_info_df = self.reref_chn_df
-            chn_list = self.reref_chn_list
-        # Extract electrodes information if not using rereference results
-        else:
-            logging.info(f"Extracting channel positions from {electrodes_tsv}")
-            # Extract info about electrodes positions
-            elec_pos = pd.read_csv(electrodes_tsv, sep="\t")
-            # Filter any channels with nan vals
-            nan_rows = elec_pos[['x', 'y', 'z']].isna().any(axis=1)
-            elec_pos = elec_pos.loc[~nan_rows]
-            dropped_chns = elec_pos.loc[nan_rows, 'name'].values.tolist()
-            # First extract list of channels present in edf file
-            edf = pyedflib.EdfReader(self.edf_path)
-            elec_edf = edf.getSignalLabels()
-            edf.close()
-            # Check if needs to preprocess electrodes.tsv file
-            if reference=='bipolar':
-                # Needs to convert electrodes df to bipolar
-                # Create bipolar combinations
-                _, elec_pos = create_bipolars(
-                    elec_pos, elec_edf, self.processes, compare_edf=False
-                )
-
-            chn_info_df, chn_list, discarded_chns = get_chn_info(
-                elec_pos, elec_edf, reference
-            )  # , conf=conf
-        # Create tsv file with information about location of the channels
-        df_location, regions_per_chn = extract_location(
-            aparc_aseg_path,
-            chn_info_df,
-            self.tfm,
-            colortable_file,
-            reference,
-            vol_version,
-            mask_out
-        )
-        if write_tsv:
-            if os.path.exists(out_tsv_path):
-                logging.warning(f" tsv file {out_tsv_path} will be overwritten.")
-            df_location.to_csv(out_tsv_path, index=False, sep="\t")
-        # Write json
-        if json_out and vol_version:
-            with open(json_out, "w") as outfile:
-                json.dump(regions_per_chn, outfile)
-        # Discard data from white matter
-        if discard_wm_un:
-            chn_list = apply_bipolar_criteria(df_location, chn_list, self.processes)
-            # print(chn_list)
-            # Overwrite reref info if previously run
-            if use_reref:
-                self.reref_chn_list = chn_list
-            # else:
-            #     logging.critical('Tool currently does not write the edf file for unipolar cases.')
-            #     return df_location
-
-            # Write edf file if requested (only if the chn list changed!)
-            # NOT WORKING FOR UNIPOLAR CASES! create_EDF only works for bipolar
-            if write_edf:
-                if os.path.exists(out_edf_path):
-                    logging.warning(f"EDF file {out_edf_path} will be overwritten.")
-                create_EDF(
-                    self.edf_path, out_edf_path, self.processes, chn_labels=chn_list
-                )
-                self.rereference_edf = out_edf_path
-        elif (not discard_wm_un) and write_edf:
-            logging.warning(
-                f"EDF file {out_edf_path} will only be copied as no updates have been made."
-            )
-        
-        if return_report:
-            unique_regions = df_location['region name'].unique()
-            region_maps = {'Region': unique_regions, 'Number of channels': [], 'Channels':[]}
-            for region in unique_regions:
-                chns = df_location.loc[df_location['region name']==region, "name"].values
-                region_maps['Number of channels'].append(len(chns))
-                region_maps['Channels'].append(chns)
-            df_regions = pd.DataFrame(region_maps)
-            report = {
-                'Discarded channels': discarded_chns+dropped_chns
-            }
-            return df_location, df_regions, report
-        return df_location
-        
-
+        return None
+   
+   
     def downsample(
-        self, channels_tsv, target_srate, write_edf=False, out_edf_path=None, return_report=True
-    ):
-        import pyedflib
-        from multiprocessing.pool import Pool
-        from multiprocessing import get_context
-        from functools import partial
-        import numpy as np
-        import os
+        self,
+        channels_tsv: Union[str, os.PathLike],
+        target_srate: float,
+        out_edf_path: Union[str, os.PathLike, None] = None,
+        return_report: bool = True
+    ) -> Union[Tuple[np.ndarray, pd.DataFrame], np.ndarray]:
+        """
+        Downsamples the signal data in an EDF file.
 
-        # print('aqui')
-        # print(self.edf_path)
-        # Open edf file
+        This function downsamples the signal data in an EDF file to a specified target sampling rate. It can 
+        optionally write the downsampled data to a new EDF file and return a report summarizing the downsampling 
+        process.
+
+        Parameters
+        ----------
+        channels_tsv : str or os.PathLike
+            Path to a TSV file containing channel information.
+        target_srate : float
+            Target sampling rate for downsampling.
+        out_edf_path : str or os.PathLike, optional
+            If not None, this path is used to save the downsampled EDF file.
+        return_report : bool, optional
+            If True, returns a report summarizing the downsampling process. Default is True.
+
+        Returns
+        -------
+        Tuple[np.ndarray, pd.DataFrame] or np.ndarray
+            If `return_report` is True, returns a tuple with the downsampled data and a DataFrame summarizing 
+            the downsampling process. Otherwise, returns only the downsampled data.
+
+        Raises
+        ------
+        ValueError
+            If `channels_tsv` is not provided.
+
+        Examples
+        --------
+        >>> TODO
+        """
+        if channels_tsv is None:
+            raise ValueError("Please indicate the path to a TSV file with channels information.")
+        
+        # Open EDF file
         with pyedflib.EdfReader(self.edf_path) as reader:
             # Extract labels to only process signals in tsv file
             labels = reader.getSignalLabels()
             chn_labels, discarded_labels = get_chn_labels(channels_tsv, labels)
-            # Number of samples
+            # Number of samples based on the first channel
             N = reader.getNSamples()[0]
+
         # create a process context. Refer to:
         # https://github.com/dask/dask/issues/3759
         ctx = get_context("spawn")
@@ -408,14 +298,16 @@ class cleanSEEG:
                     chn_labels,
                 )
             )
+        
         # Reformatting to array
-        n_samples = len(data_list[0])
-        data_dnsampled = np.zeros((len(chn_labels), n_samples))
-        for ch in np.arange(len(data_list)):
-            data_dnsampled[ch, :] = data_list[ch]
+        data_dnsampled =  np.array(data_list)
+        # n_samples = len(data_list[0])
+        # data_dnsampled = np.zeros((len(chn_labels), n_samples))
+        # for ch in np.arange(len(data_list)):
+        #     data_dnsampled[ch, :] = data_list[ch]
 
         # Write edf if requested
-        if write_edf:
+        if out_edf_path is not None:
             if os.path.exists(out_edf_path):
                 logging.warning(f"EDF file {out_edf_path} will be overwritten.")
             create_EDF(
@@ -428,51 +320,252 @@ class cleanSEEG:
             )
             del data_list
             self.downsample_edf = out_edf_path
+        
         report = {
             'Original sampling rate': self.srate,
             'Target sampling rate': target_srate,
             'New sampling rate': newSrate[0],
             'Discarded channels':discarded_labels
         }
+        
         if return_report:
             return data_dnsampled, pd.DataFrame([report])
-        else:
-            return data_dnsampled
+        
+        return data_dnsampled
+
+    def drift_correction(
+        self,
+        channels_tsv: Union[str, os.PathLike],
+        out_edf_path_clean: Union[str, os.PathLike] = None,
+    )-> Tuple[np.ndarray, pd.DataFrame, Dict[str, Union[str, List[str], List[float]]]]:
+        """
+        Applies drift correction to a given EDF file.
+
+        This function applies drift correction to the signal data in an EDF file and produces a new 
+        file with the clean signal. A report with relevant information for quality control (QC) of
+        the results is also returned.
+
+        Parameters
+        ----------
+        channels_tsv : str or os.PathLike
+            Path to a TSV file containing channel information 
+            (*_channels.tsv file according to the BIDS standard).
+        out_edf_path_clean : str or os.PathLike, optional
+            Path to save the cleaned EDF file. If not provided, the cleaned file is not saved.
+
+        Returns
+        -------
+        clean : np.ndarray
+            The cleaned signal data.
+        df_report : pd.DataFrame
+            DataFrame containing the original and new mean values of the signals.
+        report : dict
+            Dictionary containing the method used for detrending and any discarded channels.
+
+        Raises
+        ------
+        ValueError
+            If `channels_tsv` is not provided.
+        """
+        # Validate channels_tsv
+        if channels_tsv is None:
+            raise ValueError("Please indicate the path to a TSV file with channels information.")
+        
+        
+        chn_labels, discarded_labels, signal = extract_signal(channels_tsv, self.edf_path)
+
+        clean, filt_params = remove_trend(signal, self.RmTrendMethod, self.srate, self.highpass)
+
+        # Write edfs if requested
+        if out_edf_path_clean is not None:
+            # Clean signal
+            # convert to list
+            clean_list = [clean[i, :] for i in range(clean.shape[0])]
+            if os.path.exists(out_edf_path_clean):
+                logging.warning(
+                    f"EDF file {out_edf_path_clean} will be overwritten."
+                )
+            create_EDF(
+                self.edf_path,
+                out_edf_path_clean,
+                self.processes,
+                chn_labels=chn_labels,
+                signal=clean_list,
+            )
+            del clean_list
+            self.clean_edf = out_edf_path_clean
+
+        # Create dataframe with relevant info to QC
+        df_report = pd.DataFrame({
+            'Channel': chn_labels,
+            'Original mean': np.mean(signal, axis=1),
+            'New mean': np.mean(clean, axis=1)
+        })
+        
+        # Now create report with the characteristics of the method applied
+        report = {
+            'Method used': self.RmTrendMethod,
+            'Discarded channels': discarded_labels
+        }
+        if self.highpass is not None:
+            report['Transition band (Hz)'] = self.highpass
+        
+        # Finally plot the filter if exists
+        if len(filt_params)>0:
+            plot_filter(filt_params[0], filt_params[1], os.path.dirname(out_edf_path_clean), self.highpass)
+        
+        return clean, df_report, report
+
+    # Reference function
+    def rereference(
+        self,
+        electrodes_tsv: Union[str, os.PathLike],
+        out_edf_path: Union[str, os.PathLike],
+        out_tsv_path: Union[str, os.PathLike] = None,
+        return_report: bool = True,
+    ) -> Union[Tuple[pd.DataFrame, Dict[str, List[str]]], None]:
+
+        """
+        Reference a given monopolar EDF to a bipolar scheme.
+
+        This function converts a monopolar EDF file to a bipolar scheme based on electrode names
+        provided in a TSV file. It can also produce a TSV file with the bipolar channel information 
+        and return a report summarizing the discarded channels.
+
+        Parameters
+        ----------
+        electrodes_tsv : str or os.PathLike
+            Path to a TSV file containing channel information
+            (*electrodes.tsv file according to the BIDS standard).
+        out_edf_path : str or os.PathLike
+            Path to save the output EDF file with the bipolar scheme.
+        out_tsv_path : str or os.PathLike, optional
+            Path to save the TSV file with the bipolar channel information. Required if it desired to output the table.
+        return_report : bool, optional
+            If True, returns a report summarizing the bipolar combinations and discarded channels. Default is True.
+
+        Returns
+        -------
+        Tuple[pd.DataFrame, Dict[str, List[str]]] or None
+            If `return_report` is True, returns a tuple with a DataFrame of bipolar combinations and a dictionary
+            with discarded channels. Otherwise, returns None.
+
+        Raises
+        ------
+        ValueError
+            If `electrodes_tsv` is not provided.
+
+        Examples
+        --------
+        >>> TODO
+        """
+        # Manage some errors:
+        if electrodes_tsv is None:
+            raise ValueError("Please indicate the path to a TSV file with channels information.")
+
+        # Extract info about electrodes positions
+        elec_pos = pd.read_csv(electrodes_tsv, sep="\t")
+        with pyedflib.EdfReader(self.edf_path) as reader:
+            # Extract channels present in edf file (might not be all)
+            elec_edf = reader.getSignalLabels()
+        
+        # First check which electrodes from the TSV are in the EDF
+        _, discarded_labels = get_chn_labels(electrodes_tsv, elec_edf)
+        if len(discarded_labels) >= len(elec_pos):
+            raise ValueError("The EDF file is in the wrong format or it's already bipolar.")
+        
+        # Create bipolar combinations
+        bipolar_channels, bipolar_info_df = create_bipolars(
+            elec_pos, elec_edf, self.processes
+        )
+
+        # Save values in the class
+        self.reref_chn_list = bipolar_channels
+        self.reref_chn_df = bipolar_info_df
+
+        # Write TSV
+        if out_tsv_path is not None: 
+            if os.path.exists(out_tsv_path):
+               logging.warning(f"tsv file {out_tsv_path} will be overwritten.")
+            bipolar_info_df.to_csv(out_tsv_path, index=False, sep="\t")
+
+        # print(bipolar_channels)
+
+        # Create new EDF file
+        if out_edf_path is not None:
+            if os.path.exists(out_edf_path):
+                logging.warning(f"edf file {out_edf_path} will be overwritten.")
+            create_EDF(
+                self.edf_path, out_edf_path, self.processes, chn_labels=bipolar_channels
+            )
+            self.rereference_edf = out_edf_path
+        if return_report:
+            bipolar_combs = {
+                'Bipolar channel': [values[0] for values in bipolar_channels],
+                'Unipolar channels': [values[1:] for values in bipolar_channels]
+            }
+            report = {
+                'Discarded channels': discarded_labels
+            }
+            return pd.DataFrame(bipolar_combs), report
+        
+        return None
 
     # Function to reject PLI
-    def reject_PLI(self, channels_tsv, write_edf=False, out_edf_path=None, return_report=True):
-        import pyedflib
-        import numpy as np
-        import traceback
-        import os
+    def reject_PLI(
+        self,
+        channels_tsv: Union[str, os.PathLike],
+        out_edf_path: Union[str, os.PathLike, None] = None,
+        return_report: bool = True
+    ) -> Union[Tuple[np.ndarray, Dict[str, Union[List[str], str, int, float]]], np.ndarray]:
+        """
+        Applies power line interference (PLI) attenuation using one of four methods.
+
+        This function attenuates power line interference (PLI) in the signal data of an EDF file using one of four methods:
+        Cleanline, Zapline, rejectPLI, or Notch Filtering. It can optionally write the cleaned data to a new EDF file and
+        return a report summarizing the PLI removal process.
+
+        Parameters
+        ----------
+        channels_tsv : str or os.PathLike
+            Path to a TSV file containing channel information.
+        write_edf : bool, optional
+            If True, writes the cleaned data to a new EDF file. Default is False.
+        out_edf_path : str or os.PathLike, optional
+            Path to save the cleaned EDF file. Required if `write_edf` is True.
+        return_report : bool, optional
+            If True, returns a report summarizing the PLI removal process. Default is True.
+
+        Returns
+        -------
+        Tuple[np.ndarray, Dict[str, Union[List[str], str, int, float]]] or np.ndarray
+            If `return_report` is True, returns a tuple with the cleaned data and a dictionary summarizing the PLI removal
+            process. Otherwise, returns only the cleaned data.
+
+        Raises
+        ------
+        ValueError
+            If `channels_tsv` is not provided.
+
+        Examples
+        --------
+        >>>  TODO
+        """
 
         # Manage a few exceptions:
-        if write_edf and out_edf_path == None:
-            raise Exception(
-                "EDF file with clean signal cannot be written without and appropiate out path"
-            )
-        # Open edf file
-        with pyedflib.EdfReader(self.edf_path) as edf_in:
-            # Extract labels
-            labels = edf_in.getSignalLabels()
-            chn_labels, discarded_labels = get_chn_labels(channels_tsv, labels)
-            # Number of samples
-            N = edf_in.getNSamples()[0]
-            # Create signal list
-            signal = []
-            # Extract signal per channel
-            for chan in chn_labels:
-                id_ch = labels.index(chan)
-                chn_sig = edf_in.readSignal(id_ch)
-                signal.append(chn_sig)
-        # Convert signal to array
-        signal = np.vstack(signal)
+        if channels_tsv is None:
+            raise ValueError("Please indicate the path to a TSV file with channels information.")
+
+        # Get signal and labels
+        chn_labels, discarded_labels, signal = extract_signal(channels_tsv, self.edf_path)
+        
         # Remove line noise
-        print("Removing line noise")
-        clean = self.wrapper_PLI(signal)
-        print("PLI removal completed.")
+        logging.info("Removing line noise")
+        clean = self._wrapper_PLI(signal)
+        logging.info("PLI removal completed.")
+
         # Write edfs if requested
-        if write_edf:
+        if out_edf_path is not None:
             # Clean signal
             # convert to list
             clean_list = [clean[i, :] for i in range(clean.shape[0])]
@@ -487,29 +580,230 @@ class cleanSEEG:
             )
             del clean_list
             self.clean_edf = out_edf_path
+        
+        # Create report if requested
         if return_report:
-            report = dict()
-            report['Method'] = self.methodPLI
-            report['Line frequency (Hz)'] = self.lineFreq
+            report = {
+                'Discarded channels': discarded_labels,
+                'Method': self.methodPLI,
+                'Line frequency (Hz)': self.lineFreq
+            }
             if self.methodPLI == "Cleanline":
                 report['Bandwidth (Hz)'] = self.bandwidth
             elif self.methodPLI == "NotchFilter":  # TODO: add bandwidth param
                 report['Number of Harmonics'] = self.n_harmonics
             elif self.methodPLI == "PLIremoval":
-                report['Number of Harmonics'] = 3
-                report['B0, Initial notch bandwidth of the frequency estimator'] = 100
-                report['Binf, Asymptotic notch bandwidth of the frequency estimator'] = 0.01
-                report['Bst, Rate of convergence to 95# of the asymptotic bandwidth Binf'] = 4
-                report['P0, Initial settling time of the frequency estimator'] = 0.1
-                report['Asymptotic settling time of the frequency estimator'] = 2
-                report['Pst, Rate of convergence to 95# of the asymptotic settling time'] = 5
-                report['W, Settling time of the amplitude and phase estimator'] = 2
+                report.update({
+                    'Number of Harmonics': 3,
+                    'B0, Initial notch bandwidth of the frequency estimator': 100,
+                    'Binf, Asymptotic notch bandwidth of the frequency estimator': 0.01,
+                    'Bst, Rate of convergence to 95# of the asymptotic bandwidth Binf': 4,
+                    'P0, Initial settling time of the frequency estimator': 0.1,
+                    'Asymptotic settling time of the frequency estimator': 2,
+                    'Pst, Rate of convergence to 95# of the asymptotic settling time': 5,
+                    'W, Settling time of the amplitude and phase estimator': 2
+                })
                 # Hardcoded for now
             return clean, report
+        
         return clean
+    
+    def identify_regions(
+        self,
+        electrodes_tsv: Union[str, os.PathLike],
+        segmentation_path: Union[str, os.PathLike],
+        colortable_file: Union[str, os.PathLike],
+        reference: Literal['bipolar', 'unipolar'],
+        use_reref: bool = True,
+        out_tsv_path: Union[str, os.PathLike, None] = None,
+        discard_wm_un: bool = False,
+        out_edf_path: Union[str, os.PathLike, None] = None,
+        vol_version: bool = False,
+        json_out: Union[str, os.PathLike, None] = None,
+        mask_out: Union[str, os.PathLike, None] = None,
+        return_report: bool = True
+    ) -> Union[Tuple[pd.DataFrame, pd.DataFrame, Dict[str, List[str]]], pd.DataFrame]:
+        """
+        Estimate brain regions for each channel based on a given parcellation file.
+
+        This function estimates brain regions for each channel using a given parcellation file. It supports both
+        monopolar and bipolar channels and two methods: volumetric approach and point-based approach.
+
+        Parameters
+        ----------
+        electrodes_tsv : str or os.PathLike
+            Path to a TSV file containing channel information
+            (*electrodes.tsv file according to the BIDS standard).
+        segmentation_path : str or os.PathLike
+            Path to the file containing parcellation information that can be loaded with Nibabel 
+            and contains a header and affine transform.
+        colortable_file : str or os.PathLike
+            Path to a TSV file containing colortable information to assign labels and colors to the
+            values in given segmentation file.
+        reference : Literal['bipolar', 'unipolar']
+            Reference of the channels in the EDF file. Must be either 'bipolar' or 'unipolar'.
+        use_reref : bool, optional
+            If True, previous information calculated in the re-referencing step is used. 
+            Default is True. If True, re-reference must have been ran before.
+        out_tsv_path : str, os.PathLike or None, optional
+            If not None, indicates the path to save the TSV file with channel location information.
+        discard_wm_un : bool, optional
+            If True, discards channels from the EDF file estimated to be in white matter and unknown
+            regions based on the given parcellation. Default is False.
+        out_edf_path : str, os.PathLike or None, optional
+            If not None, indicates the path to save the cleaned EDF file with the non-discarded channels.
+        vol_version : bool, optional
+            If True, uses volumetric approach for region estimation, else, the point-based method
+            is used. Default is False.
+        json_out : str, os.PathLike or None, optional
+           If not None, indicates the path to save the JSON file with region information for each
+           channel in the given EDF file. Only applicable if `vol_version` is True.
+        mask_out : sstr, os.PathLike or None, optional
+            If not None, indicates the path to save the mask file created during the volumetric estimation
+            of the regions for each channel. Default is None. Only applicable if `vol_version` is True.
+        return_report : bool, optional
+            If True, returns a report summarizing the region estimation process. Default is True.
+
+        Returns
+        -------
+        Tuple[pd.DataFrame, pd.DataFrame, dict] or pd.DataFrame
+            If `return_report` is True, returns a tuple with DataFrames for channel coordinates and regions per channel, and a dictionary
+            summarizing the discarded channels. Otherwise, returns only the DataFrame for channel coordinates.
+
+        Raises
+        ------
+        ValueError
+            If `reference` is not 'bipolar' or 'unipolar'.
+            If `electrodes_tsv` is not provided.
+
+        Examples
+        --------
+        >>> TODO
+        """
+        # Manage exception
+        if reference not in ['bipolar', 'unipolar']:
+            raise ValueError("Reference must be either 'bipolar' or 'unipolar'.")
+
+        if electrodes_tsv is None:
+            raise ValueError("Please indicate the path to a TSV file with electrodes information.")
+
+        if use_reref:
+            if len(self.reref_chn_list) == 0 or len(self.reref_chn_df) == 0:
+                raise ValueError("Please run rereference first or set use_reref to False.")
+            chn_info_df = self.reref_chn_df
+            chn_list = self.reref_chn_list
+        # Extract electrodes information if not using rereference results
+        else:
+            logging.info(f"Extracting channel positions from {electrodes_tsv}")
+            # Extract info about electrodes positions
+            elec_pos = pd.read_csv(electrodes_tsv, sep="\t")
+            # Filter any channels with nan vals as coordinates
+            nan_rows = elec_pos[['x', 'y', 'z']].isna().any(axis=1)
+            elec_pos = elec_pos.loc[~nan_rows]
+            dropped_chns = elec_pos.loc[nan_rows, 'name'].values.tolist()
+            
+            # First extract list of channels present in edf file
+            with pyedflib.EdfReader(self.edf_path) as edf:
+                elec_edf = edf.getSignalLabels()
+
+            # Check if needs to preprocess electrodes.tsv file
+            if reference=='bipolar':
+                # Needs to convert electrodes df to bipolar
+                # Create bipolar combinations
+                _, elec_pos = create_bipolars(
+                    elec_pos, elec_edf, self.processes, compare_edf=False
+                )
+
+            chn_info_df, chn_list, discarded_chns = get_chn_info(
+                elec_pos, elec_edf, reference
+            )  
+
+        # Create tsv file with information about location of the channels
+        df_location, regions_per_chn = extract_location(
+            segmentation_path,
+            chn_info_df,
+            self.tfm,
+            colortable_file,
+            reference,
+            vol_version,
+            mask_out
+        )
+
+
+        if out_tsv_path is not None:
+            if os.path.exists(out_tsv_path):
+                logging.warning(f"TSV file {out_tsv_path} will be overwritten.")
+            df_location.to_csv(out_tsv_path, index=False, sep="\t")
+        
+        if json_out and vol_version:
+            with open(json_out, "w") as outfile:
+                json.dump(regions_per_chn, outfile)
+        
+        # Discard data from white matter and unknown if requested
+        if discard_wm_un:
+            chn_list = apply_bipolar_criteria(df_location, chn_list, self.processes)
+            # Overwrite reref info if previously run
+            if use_reref:
+                self.reref_chn_list = chn_list
+
+
+            # Write edf file if requested
+            if out_edf_path is not None:
+                if os.path.exists(out_edf_path):
+                    logging.warning(f"EDF file {out_edf_path} will be overwritten.")
+                create_EDF(
+                    self.edf_path, out_edf_path, self.processes, chn_labels=chn_list
+                )
+                self.rereference_edf = out_edf_path
+        elif (not discard_wm_un) and (out_edf_path is not None):
+            logging.warning(
+                f"EDF file {out_edf_path} will only be copied from the original EDF as no updates have been made."
+            )
+            shutil.copyfile(self.edf_path, out_edf_path)
+        
+        if return_report:
+            unique_regions = df_location['region name'].unique()
+            region_maps = {'Region': unique_regions, 'Number of channels': [], 'Channels':[]}
+            for region in unique_regions:
+                chns = df_location.loc[df_location['region name']==region, "name"].values
+                region_maps['Number of channels'].append(len(chns))
+                region_maps['Channels'].append(chns)
+            df_regions = pd.DataFrame(region_maps)
+            report = {
+                'Discarded channels': discarded_chns+dropped_chns
+            }
+            return df_location, df_regions, report
+        
+        return df_location
+        
 
     # Wrapper to manage different PLI methods
-    def wrapper_PLI(self, signal):
+    def _wrapper_PLI(self, signal: np.ndarray) -> np.ndarray:
+        """
+        Applies the specified PLI attenuation method to the signal.
+
+        This function applies the specified power line interference (PLI) attenuation method to the input signal. 
+        The method is determined by the `methodPLI` attribute of the class.
+
+        Parameters
+        ----------
+        signal : np.ndarray
+            Input signal data to be processed.
+
+        Returns
+        -------
+        np.ndarray
+            Signal data after PLI attenuation.
+
+        Raises
+        ------
+        ValueError
+            If the specified PLI method is not valid.
+
+        Examples
+        --------
+        >>> clean_signal = _wrapper_PLI(signal)
+        """
         if self.methodPLI == "Cleanline":
             signal = cleanline(
                 signal.T, self.srate, processes=self.processes, bandwidth=self.bandwidth
@@ -530,243 +824,82 @@ class cleanSEEG:
                 2,
                 processes=self.processes,
                 f_ac=self.lineFreq,
-            )  # Hardcoded for now
+            )  # Hardcoded for now, TODO
         else:
-            raise Exception("PLI method not valid.")
+            raise ValueError("PLI method not valid.")
         signal = signal.T
         return signal
 
-    def clean_epochs(
+    def _create_epoch_edf_files(
         self,
-        channels_tsv,
-        subject=None,
-        subjects_dir=None,
-        return_interpolated=False,
-        write_edf_clean=False,
-        out_edf_path_clean=None,
-        write_tsv=False,
-        out_tsv_path=None,
-        write_edf_int=False,  # Not working for now
-        out_edf_path_int=None,
-        verbose=False,
-    ):
-        import pyedflib
-        import numpy as np
-        import pandas as pd
-        import traceback
-        import logging
-        import os
+        time_stamps_init: List[float],
+        n_samples: int,
+        out_files: Union[List[str], os.PathLike],
+        out_root: str,
+        new_edf: Union[str, None],
+        entities: Dict[str, str],
+        report: Dict[str, List],
+        event_start: Union[str, int]
+    ) -> Dict[str, List]:
+        """
+        Create new EDF files with the found timestamps given the events of interest.
 
-        # Include attributes:
-        self.subject = subject
-        self.subjects_dir = subjects_dir
-        # Manage a few exceptions:
-        if write_edf_clean and out_edf_path_clean == None:
-            raise Exception(
-                "EDF file with clean signal cannot be written without and appropiate out path"
-            )
-        if write_edf_int and out_edf_path_int == None:
-            raise Exception(
-                "EDF file with interpolated signal cannot be written without and appropiate out path"
-            )
-        if write_tsv and out_tsv_path == None:
-            raise Exception(
-                "TSV file with noise information cannot be written without and appropiate out path"
-            )
-        if channels_tsv == None:
-            raise Exception(
-                "Please indicate the path to a tsv file with channels information."
-            )  # Open edf file
-        with pyedflib.EdfReader(self.edf_path) as edf_in:
-            # Extract labels
-            elec_edf = edf_in.getSignalLabels()
-            # Begin by getting the position of the electrodes in RAS space
-            chn_labels, discarded_labels = get_chn_labels(channels_tsv, elec_edf)
-            # Number of samples
-            N = edf_in.getNSamples()[0]
-            ### THIS MUST BE CHANGED TO A MORE STANDARD APPROACH
-            # Define length of epochs based on the first one
-            # t_init_id = np.argmin((np.abs(t-t_init)))
-            # t_end_id = np.argmin((np.abs(t-t_end)))
-            # samples_epoch = t_end_id-t_init_id
-            # print(samples_epoch)
-            # Initiate csv epoch file
-            cols = ["Epoch #", "Start ID", "End ID"] + chn_labels
-            df_epochs = pd.DataFrame(columns=cols)
-            # Count of removed elements per epoch
-            n_removed = [0]
-            # Initialize in 0 as per epoch, the start id will be n_orig[id]-n_removed[id] and the end id: n_orig[id]-n_removed[id+1]
-            # Example: if 10 elements were removed in the first epoch and 12 in the 2nd, then the start id of the second should be
-            # the original one minus 10 but the end should be the original minus 22
-            # Create signal list
-            signal = []
-            # Extract signal per channel
-            for chan in chn_labels:
-                id_ch = elec_edf.index(chan)
-                chn_sig = edf_in.readSignal(id_ch)
-                signal.append(chn_sig)
-            # Convert signal to array
-            signal = np.vstack(signal)
-        # Run cleaning
-        # First remove line noise
-        # print('Removing line noise')
-        # signal = self.wrapper_PLI(signal)
-        # print('PLI removal completed.')
+        This function creates new EDF files with the found timestamps given the events of interest in the original EDF file.
+        The function also updates the report with details about each epoch.
 
-        # Second, identify noisy segments and highpass filter the data
-        if self.noiseDetect and return_interpolated:
-            clean, interpolated, df_epochs, filt_params = self.noiseDetect_raw(
-                signal, elec_edf, channels_tsv, return_interpolated=True, verbose=verbose
-            )
-            # Update number of removed elements after autoreject
-            n_removed.append(clean.shape[-1] - interpolated.shape[-1])
-        elif self.noiseDetect:
-            clean, df_epochs, filt_params = self.noiseDetect_raw(
-                signal, elec_edf, channels_tsv, return_interpolated=False, verbose=verbose
-            )
-        else:
-            clean, filt_params = self.noiseDetect_raw(
-                signal, elec_edf, channels_tsv, return_interpolated=False, verbose=verbose
-            )
+        Parameters
+        ----------
+        time_stamps_init : list of float
+            List of initial timestamps for the events of interest.
+        n_samples : int
+            Number of samples to extract for each epoch.
+        out_files : list of str or os.PathLike
+            List of output file paths. If not specified, files are named automatically.
+        out_root : str
+            Root directory to save the output EDF files.
+        new_edf : str or None
+            Path to a temporary EDF file, if any.
+        entities : dict of str
+            Dictionary of entities for naming the output files.
+        report : dict of list
+            Dictionary to store the report details about each epoch.
+        event_start : str or int
+            Starting point of the event. Can be an index or a label.
 
-        # Write edfs if requested
-        if write_edf_clean:
-            # Clean signal
-            # convert to list
-            clean_list = [clean[i, :] for i in range(clean.shape[0])]
-            if os.path.exists(out_edf_path_clean):
-                logging.warning(
-                    f"EDF file {out_edf_path_clean} will be overwritten."
+        Returns
+        -------
+        dict of list
+            Updated report with details about each epoch.
+        """
+        for index, event_timestamp in enumerate(time_stamps_init):
+            if out_files is None:
+                # New file name
+                entities["clip"] = f"{index+1:02}"
+                out_edf_path = os.path.basename(
+                    snakebids.bids(root=out_root, **entities)
                 )
-            create_EDF(
-                self.edf_path,
-                out_edf_path_clean,
-                self.processes,
-                chn_labels=chn_labels,
-                signal=clean_list,
-            )
-            del clean_list
-            self.clean_edf = out_edf_path_clean
-
-        if write_edf_int and self.noiseDetect:
-            # Interpolated signal
-            logging.critical(
-                "Currently, writing the EDF file for the interpolated signal is not supported."
-            )
-            # convert to list
-            # int_list = [interpolated_sig[i,:] for i in range(interpolated_sig.shape[0])]
-            # if os.path.exists(out_edf_path_int):
-            #     logging.warning(f"EDF file {out_edf_path_int} will be overwritten.")
-            # create_EDF(self.edf_path, out_edf_path_int, self.processes, chn_labels = chn_labels, signal = int_list, n_removed = n_removed)
-            # del int_list
-            # self.inter_edf = out_edf_path_int
-
-        # Write tsv with noise data
-        if write_tsv and self.noiseDetect:
-            if os.path.exists(out_tsv_path):
-                logging.warning(f" tsv file {out_tsv_path} will be overwritten.")
-            df_epochs.to_csv(out_tsv_path, index=False, sep="\t")
-        
-        # Report
-        # First get the table with means of signals
-        df_report = pd.DataFrame({
-            'Channel': chn_labels,
-            'Original mean': np.mean(signal, axis=1),
-            'New mean': np.mean(clean, axis=1)
-        })
-        # Now the report with method for detrending 
-        report = {
-            'Method used': self.RmTrendMethod,
-            'Discarded channels': discarded_labels
-        }
-        if self.highpass is not None:
-            report['Transition band (Hz)'] = self.highpass
-        # Finally plot the filter if exists
-        if len(filt_params)>0:
-            plot_filter(filt_params[0], filt_params[1], os.path.dirname(out_edf_path_clean), self.highpass)
-        # Return
-        if self.noiseDetect and return_interpolated:
-            return clean, interpolated, df_epochs, df_report, report
-        elif self.noiseDetect:
-            return clean, df_epochs, df_report, report
-        # Else, just return the filtered signal
-        return clean, df_report, report
-
-    def noiseDetect_raw(
-        self, raw, electrodes_edf, channels_tsv, return_interpolated=False, verbose=False
-    ):
-        # electrodes_edf: list with channels present in edf file
-        import numpy as np
-        import pandas as pd
-        import traceback
-        import nibabel as nb
-        import os
-
-        print(raw.shape)
-        if self.noiseDetect and (self.subject == None or self.subjects_dir == None):
-            raise Exception(
-                "Please indicate a valid subject and directory for the freesurfer outputs."
-            )
-        # Remove drifts (highpass data) if required
-        if self.highpass != None:
-            print("Removing trend")
-            raw, filt_params = remove_trend(raw, self.RmTrendMethod, self.srate, self.highpass)
-            # raw = clean_drifts(raw,self.srate,Transition=self.highpass)
-        print(raw.shape)
-        # Remove flat-line channels
-        # if self.maxFlatlineDuration != None:
-        #     print('Removing flatlines')
-        #     raw = clean_flatlines(raw,self.srate,maxFlatlineDuration=self.maxFlatlineDuration)
-        # print(raw.shape)
-        if self.noiseDetect:
-            # ---------------Run automatic detection of noise using autoreject-------------------
-            print("Running autoreject")
-            chn_pos = get_chn_positions(channels_tsv, electrodes_edf, self.tfm)
-            # Channels to extract
-            keys = list(chn_pos.keys())
-            # Number of samples
-            N = raw.shape[-1]
-            # Create time vector using srate
-            t = np.arange(0, N) / self.srate
-
-            # Create sEEG montage
-            montage = get_montage(chn_pos, self.subject, self.subjects_dir)
-            # Initiate csv epoch file
-            cols = ["Epoch #", "Start ID", "End ID"] + keys
-            # Create MNE epochs
-            mne_epochs, epochs_ids, n_missed = create_mne_epochs(
-                raw, keys, self.srate, montage, self.epoch_autoreject
-            )
-            # Update IDs
-            start_IDs = epochs_ids["Start ID"]
-            end_IDs = epochs_ids["End ID"]
-
-            # Run autoreject
-            epochs_ar, noise_labels = run_autoreject(mne_epochs, verbose=verbose)
-            # Create noise df
-            # Start-end IDs for each epoch
-            IDs_array = np.array([start_IDs, end_IDs]).T
-            # Epoch numbering
-            epoch_num = np.arange(1, 1 + len(start_IDs))
-            noise_array = np.c_[epoch_num, IDs_array, noise_labels]
-            df_epochs = pd.DataFrame(data=noise_array, columns=cols)
-
-            # Return interpolated signal only if requested!
-            if return_interpolated:
-                # Reshape to n_chn x n_time
-                clean_sig = epochs_ar.get_data()
-                print(clean_sig.shape)
-                clean_sig = clean_sig.swapaxes(0, 1).reshape(len(keys), -1)
-                # Attach the non-clean part of the signal
-                if n_missed != 0:
-                    # print(n_missed)
-                    # print(signal[:,-n_missed:])
-                    sig_missed = raw[:, -n_missed]
-                    if sig_missed.ndim == 1:
-                        sig_missed = sig_missed.reshape(-1, 1)
-                clean_sig = np.hstack([clean_sig, sig_missed])
-                return raw, clean_sig, df_epochs, filt_params
+                out_edf_path = os.path.join(out_root, out_edf_path)
             else:
-                return raw, df_epochs, filt_params
-        else:
-            return raw, filt_params
+                # Filter based on regex
+                reg = re.compile(f"clip-{index+1:02}")
+                out_edf_path = list(filter(reg.search, out_files))[0]
+            
+            if new_edf is None:
+                time_init, duration = create_epoch_EDF(
+                                        self.edf_path,
+                                        event_timestamp,
+                                        n_samples,
+                                        out_edf_path,
+                                        self.processes,
+                )
+            else:
+                time_init, duration = create_epoch_EDF(
+                    new_edf, event_timestamp, n_samples, out_edf_path, self.processes
+                )
+            
+            # Save report
+            report["Epoch start event"].append(event_start)
+            report['Relative start time'].append(time_init)
+            report["Duration"].append(duration)
+            report['Clip number'].append(f"clip-{index+1:02}")
+        return report

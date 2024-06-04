@@ -23,9 +23,8 @@ def main():
 
       # Apply filters
       _, report_PLI = seegTF.reject_PLI(chn_tsv_path,
-                                       write_edf=True,
-                                       out_edf_path=out_edf,
-                                       return_report=True)
+                                       out_edf_path = out_edf,
+                                       return_report = True)
       with open(report_json, 'w') as json_file:
          json.dump(report_PLI, json_file)
     except:

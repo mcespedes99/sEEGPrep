@@ -24,21 +24,14 @@ def main():
         seegTF = cleanSEEG(
             edf_path,
             RmTrendMethod=snakemake.config["detrend_method"],
-            noiseDetect=False,
             highpass=snakemake.config["highpass"],
-            epoch_autoreject=snakemake.config["epoch_length"],
             processes=processes,
         )
 
         # Apply filters
-        _, df_report_filt, report_filt = seegTF.clean_epochs(
+        _, df_report_filt, report_filt = seegTF.drift_correction(
             chn_tsv_path,
-            subject=None,
-            subjects_dir=None,
-            return_interpolated=False,
-            write_edf_clean=True,
             out_edf_path_clean=out_edf,
-            verbose=False,
         )
         # Save
         df_report_filt.to_csv(report_df, index=False, sep="\t")

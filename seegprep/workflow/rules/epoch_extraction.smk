@@ -36,7 +36,7 @@ def out_dir_epochs():
 rule epochs:
     input: 
         edf = inputs.path['edf'],
-        annot = inputs.path['events'],
+        # annot = inputs.path['events'],
     output:
         tmp_file = temp(
                         bids(

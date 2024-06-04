@@ -20,9 +20,8 @@ def main():
 
         # Apply downsampling
         target_srate = snakemake.config['target_srate']
-        signal_dsG, dn_report = seegTF.downsample(chn_csv_path,
+        _, dn_report = seegTF.downsample(chn_csv_path,
                                                   target_srate=target_srate,
-                                                  write_edf = True,
                                                   out_edf_path = out_edf,
                                                   return_report=True)
         dn_report.to_csv(report, index=False, sep="\t")
