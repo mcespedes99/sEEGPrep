@@ -7,13 +7,16 @@ from .val_utils import (
 
 
 def extract_signal(channels_tsv, edf_path):
-    # Retrive channels from channels.tsv file that are present in the EDF file
-    chn_labels, discarded_labels = get_chn_labels(channels_tsv, elec_edf)
     with pyedflib.EdfReader(edf_path) as edf_in:
         # Extract labels from EDF file
         elec_edf = edf_in.getSignalLabels()
         N = edf_in.getNSamples()[0]
         signal = []
+        
+        # Retrive channels from channels.tsv file that are present in the EDF file
+        chn_labels, discarded_labels = get_chn_labels(channels_tsv, elec_edf)
+
+        # Retrieve signals
         for chan in chn_labels:
             id_ch = elec_edf.index(chan)
             chn_sig = edf_in.readSignal(id_ch)

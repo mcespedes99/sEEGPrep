@@ -109,7 +109,7 @@ def create_bipolars(electrodes_df, electrodes_edf, processes, compare_edf=True):
     ]
     # Extract channels info
     for electrode in electrodes_df["name"].values:
-        if electrode in electrodes_edf:
+        if not compare_edf or (compare_edf and (electrode in electrodes_edf)):
             match = None
             n = 0
             while (not match) and (n < len(pattern)):

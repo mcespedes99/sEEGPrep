@@ -101,6 +101,8 @@ class cleanSEEG:
         # Find sample rate: Requires pyedflib <= 0.1.30
         with pyedflib.EdfReader(edf_path) as edf_in:
             self.srate = edf_in.getSampleFrequencies()[0] / edf_in.datarecord_duration
+        
+        return None
     
     
     # Epoch extraction
@@ -705,7 +707,8 @@ class cleanSEEG:
             # First extract list of channels present in edf file
             with pyedflib.EdfReader(self.edf_path) as edf:
                 elec_edf = edf.getSignalLabels()
-
+            print(elec_pos.head())
+            print(elec_edf)
             # Check if needs to preprocess electrodes.tsv file
             if reference=='bipolar':
                 # Needs to convert electrodes df to bipolar
@@ -714,6 +717,7 @@ class cleanSEEG:
                     elec_pos, elec_edf, self.processes, compare_edf=False
                 )
 
+            print(elec_pos.head())
             chn_info_df, chn_list, discarded_chns = get_chn_info(
                 elec_pos, elec_edf, reference
             )  
