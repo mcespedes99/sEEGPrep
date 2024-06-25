@@ -3,6 +3,7 @@ Algorithms to perform power line interference (PLI) removal.
 Author: Mauricio Cespedes Tenorio (Western University)
 """
 import numpy as np
+from scipy.signal import convolve
 # removePLI
 def removePLI_chns(data, fs, M, B, P, W, processes = None, f_ac=None):
     from multiprocessing.pool import Pool
@@ -234,7 +235,7 @@ def zapline(x, fline, srate, nremove=1, p={}, filt=1):
     import numpy as np
     from . import utils
     if p=={}:
-        p['nfft'] = 1024
+        p['nfft'] = 512
         p['nkeep'] = []
         p['niterations'] = 1
 
@@ -270,15 +271,16 @@ def zapline(x, fline, srate, nremove=1, p={}, filt=1):
     xxxx = (x_rem) @ (eigvecs) 
 
     # DSS to isolate line components from residual:
-    nHarmonics = np.floor((1/2)/fline);
-    [c0,c1] = utils.bias_fft(xxxx, fline*np.arange(1,nHarmonics+1), p['nfft']);
+    nHarmonics = np.floor((1/2)/fline)
+    [c0,c1] = utils.bias_fft(xxxx, (fline*np.arange(1,nHarmonics+1)).reshape(1,-1), p['nfft'])
     todss = utils.dss(c0,c1);
     # This would be the projection of the noise to the main component of the biased
     # noise, which should represent the line noise.
-    xxxx= xxxx @ todss[:,0:nremove] # line-dominated components. xxxx == LXW from paper 
-    # return xxxx
+    # xxxx = convolve(xxxx, todss[:,0:nremove], mode='same')
+    xxxx= xxxx @ todss[:,0:nremove] # line-dominated components. xxxx == LXW from paper
     # Denoise
     xxx = utils.denoise_PCA(x-xx,xxxx); # project them out
+
     del xxxx
 
     # reconstruct clean signal

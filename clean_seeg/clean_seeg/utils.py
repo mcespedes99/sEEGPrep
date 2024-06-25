@@ -6,6 +6,8 @@ import numpy as np
 import pandas as pd
 import mne
 from .clean_drifts import clean_drifts
+from scipy.signal import convolve, lfilter, hann
+from scipy.fft import fft
 import os
 
 # Function to plot filter
@@ -407,7 +409,7 @@ def clean_signal(
 """ Zapline tools """
 
 
-def square_filt(x, T, nIterations=1):
+def square_filt(x, T, nIterations=1, nodelayflag=False):
     # y=nt_smooth(x,T,nIterations,nodelayflag) - smooth by convolution with square window
     #
     #  y: smoothed data
@@ -416,18 +418,16 @@ def square_filt(x, T, nIterations=1):
     #  T: samples, size of window (can be fractionary)
     #  nIterations: number of iterations of smoothing operation (large --> gaussian kernel)
     #
-    import scipy.signal
+    # import scipy.signal
 
     integ = int(np.floor(T))
     frac = T - integ
 
-    # if integ>=size(x,1);
-    #     x=repmat(mean(x),[size(x,1),1,1,1]);
-    #     return;
-    # end
+    if integ >= x.shape[0]:
+        return np.tile(np.mean(x, axis=0), (x.shape[0], 1, 1, 1))
 
     # remove onset step
-    mn = np.mean(x[0 : integ + 1, :], axis=0)
+    mn = np.mean(x[0 : integ + 1, ...], axis=0)
     x = x - mn
 
     if nIterations == 1 and frac == 0:
@@ -439,10 +439,13 @@ def square_filt(x, T, nIterations=1):
         # filter kernel
         B = np.concatenate((np.ones(integ), [frac])) / T
         for k in np.arange(1, nIterations):
-            B = np.convolve(B, B)
+            B = convolve(B, np.concatenate((np.ones(integ), [frac])) / T)
             # print("aqui")
-        x = scipy.signal.filtfilt(B, 1, x, axis=0)  # lfilter
+        x = lfilter(B, [1], x, axis=0)  # lfilter
 
+    if nodelayflag:
+        shift = round(T / 2 * nIterations)
+        x = np.concatenate((x[shift:], np.zeros((shift, *x.shape[1:]))), axis=0)
     # restore DC
     x = x + mn
     return x
@@ -530,43 +533,77 @@ def bias_fft(x, freq, nfft):
     # first and second row.
     #
     # NoiseTools
-    import scipy.fftpack
     import numpy as np
 
-    if max(freq) > 0.5:
+    if np.max(freq) > 0.5:
         raise Exception("frequencies should be <= 0.5")
     if nfft > x.shape[0]:
         raise Exception("nfft too large")
 
+    filt = np.zeros((nfft // 2 + 1,))
+
+    if freq.shape[0] == 1:
+        for k in range(freq.shape[1]):
+            idx = int(np.round(freq[0, k] * nfft + 0.5))
+            filt[idx] = 1
+    elif freq.shape[0] == 2:
+        for k in range(freq.shape[1]):
+            idx = np.arange(int(np.round(freq[0, k] * nfft + 0.5)),
+                            int(np.round(freq[1, k] * nfft + 0.5)) + 1)
+            filt[idx] = 1
+    else:
+        raise ValueError('freq should have one or two rows')
+
+    filt = np.concatenate([filt, np.flipud(filt[1:-1])])
+
+    w = hann(nfft)
+
+    c0 = x.T @ x #np.cov(x.squeeze().T)
+    if x.ndim == 2:
+        x = x[..., np.newaxis]
+    m, n, o = x.shape
+    c1 = np.zeros_like(c0)
+    for j in range(o):
+        nframes = int(np.ceil((m - nfft / 2) / (nfft / 2)))
+        for k in range(1, nframes+1):
+            idx = int((k - 1) * nfft / 2)
+            idx = min(idx, m - nfft)
+            z = x[idx:idx + nfft, :, j]
+            # print(z.shape, idx, nfft)
+            Z = fft(z * w[:, np.newaxis], axis=0)
+            Z = Z * filt[:, np.newaxis]
+            c1 += np.real(Z.T @ Z)
+    return c0, c1
+
     # Here the filter is built in the freq domain, which has a reflection
     # Left half of the filter
-    filt = np.zeros(int(np.floor(nfft / 2) + 1))
-    for k in np.arange(0, len(freq)):
-        idx = int(freq[k] * nfft + 0.5)
-        filt[idx] = 1
+    # filt = np.zeros(int(np.floor(nfft / 2) + 1))
+    # for k in np.arange(0, len(freq)):
+    #     idx = int(freq[k] * nfft + 0.5)
+    #     filt[idx] = 1
 
-    filt = np.concatenate((filt, np.flipud(filt[0:-1])))
+    # filt = np.concatenate((filt, np.flipud(filt[0:-1])))
 
-    ## now for convolution
-    n = x.shape[0]
-    k = len(filt)
-    nConv = n + k - 1
-    half_kern = int(np.floor(k / 2))
-    filt = scipy.fftpack.fft(scipy.fftpack.ifft(filt), nConv)
+    # ## now for convolution
+    # n = x.shape[0]
+    # k = len(filt)
+    # nConv = n + k - 1
+    # half_kern = int(np.floor(k / 2))
+    # filt = scipy.fftpack.fft(scipy.fftpack.ifft(filt), nConv)
 
-    # FFTs
-    dataX = scipy.fftpack.fft(x, nConv, axis=0)
+    # # FFTs
+    # dataX = scipy.fftpack.fft(x, nConv, axis=0)
 
-    # IFFT
-    x_filt = np.multiply(dataX, filt.reshape(len(filt), 1))
-    x_filt = np.real(scipy.fftpack.ifft(x_filt, axis=0))
-    x_filt = x_filt[half_kern:-half_kern, :]
+    # # IFFT
+    # x_filt = np.multiply(dataX, filt.reshape(len(filt), 1))
+    # x_filt = np.real(scipy.fftpack.ifft(x_filt, axis=0))
+    # x_filt = x_filt[half_kern:-half_kern, :]
 
-    c0 = np.cov(x.T)
-    c1 = np.cov(x_filt.T)
+    # c0 = np.cov(x.T)
+    # c1 = np.cov(x_filt.T)
 
-    # return x_filt
-    return c0, c1
+    # # return x_filt
+    # return c0, c1
 
 
 def eigen(A):
@@ -636,8 +673,14 @@ def denoise_PCA(x, ref):
 
     mnref = np.mean(ref)
     ref = ref - mnref
-
-    # print(len(x))
+    # Normalize power
+    ref = ref/np.sqrt(np.mean(ref**2, axis=0))
+    # Calculate cref
+    if ref.shape[1] > 1: # More than 1 ref channel
+        c = np.cov(ref.T)
+        [eigenvalues, eigvecs]= eigen(c)
+        ref = (ref) @ (eigvecs) 
+        ref = ref/np.sqrt(np.mean(ref**2), axis=-1)
     cref = ref.T @ ref
     cref = cref / len(x)
 
@@ -649,7 +692,6 @@ def denoise_PCA(x, ref):
     # regression matrix of x on ref
     # PCA of regressor
     if cref.size > 1:
-        print("lolo")
         [eigenvalues, eigvecs] = eigen(cref)
         # cross-covariance between data and regressor PCs
         cxref = np.transpose(cxref)
@@ -783,7 +825,6 @@ def removeLinesMovingWindow(
     smooth = smooth[:, np.newaxis]
     winstart = np.arange(0, N - Nwin + 1, Nstep)
     nw = len(winstart)
-    # print(f'value nw: {nw}')
     datafit = np.zeros((winstart[-1] + Nwin, 1))
 
     fidx = np.zeros(len(linefreq))
@@ -794,30 +835,22 @@ def removeLinesMovingWindow(
         fidx[fk] = np.argmin(np.abs(f - linefreq[fk]))
 
     for iteration in np.arange(maximumIterations):
-        print(iteration)
         f0Mask = np.zeros(len(f0)).astype(bool)
-        # print(iteration)
         for n in np.arange(nw):
             indx = np.arange(winstart[n], (winstart[n] + Nwin))
             datawin = data[indx, :]
             datafitwin, f0Sig = fitSignificantFrequencies(
                 datawin, f0, fPassBand, bandwidth, srate, p, padding, tapers
             )
-            print(n)
-            print(f0Sig),
-            print(datawin)
-            print(datafitwin)
             f0Mask = np.logical_or(f0Mask, f0Sig)
             # datafitwin0 = datafitwin incorrectly placed
             if n > 0:
                 datafitwin[0:Noverlap, :] = np.multiply(
                     smooth, datafitwin[0:Noverlap, :]
                 ) + np.multiply((1 - smooth), datafitwin0[(Nwin - Noverlap) : Nwin, :])
-            # print(f'datafit shape {datafit.shape}')
             datafit[indx, :] = datafitwin
             datafitwin0 = datafitwin  # Moved from above the if statement
         data[0 : len(datafit), :] = data[0 : len(datafit), :] - datafit
-        print(data[0:7,:])
 
         if np.sum(f0Mask)>0:
             # Now find the line frequencies that have converged
@@ -825,10 +858,10 @@ def removeLinesMovingWindow(
             cleanedSpectrum = 10*np.log10(cleanedSpectrum); 
             dBReduction = initialSpectrum - cleanedSpectrum
             tIndex = (dBReduction[fidx.astype(int)] < 0)
-            f0[np.logical_or(tIndex, ~f0Mask)] = 0
+            f0 = f0[~np.logical_or(tIndex, ~f0Mask)]
             fidx = fidx[np.logical_and(~tIndex, f0Mask)]
             initialSpectrum = cleanedSpectrum
-        if  np.all(f0 == 0):
+        if  len(f0) == 0:
             break
     return data.T
 
