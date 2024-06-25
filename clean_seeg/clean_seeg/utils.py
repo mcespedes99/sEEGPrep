@@ -781,21 +781,21 @@ def removeLinesMovingWindow(
         1 + np.exp(-tau * (x - Noverlap / 2) / Noverlap)
     )  # sigmoidal function
     smooth = smooth[:, np.newaxis]
-    winstart = np.arange(0, N - Nwin, Nstep)
+    winstart = np.arange(0, N - Nwin + 1, Nstep)
     nw = len(winstart)
     # print(f'value nw: {nw}')
     datafit = np.zeros((winstart[-1] + Nwin, 1))
 
     fidx = np.zeros(len(linefreq))
-    f0 = linefreq
-    # [initialSpectrum, f] = calculateSegmentSpectrum(data, lineNoise)
-    # initialSpectrum = 10*log10(initialSpectrum)
-    # for fk = 1:len(linefreq)
-    #     [_, fidx(fk)] = min(abs(f - linefreq(fk)))
-    # end
+    f0 = np.array(linefreq)
+    initialSpectrum, f = calculateSegmentSpectrum(data, taperWinSize, srate, padding, fPassBand, tapers)
+    initialSpectrum = 10*np.log10(initialSpectrum)
+    for fk in range(len(linefreq)):
+        fidx[fk] = np.argmin(np.abs(f - linefreq[fk]))
 
     for iteration in np.arange(maximumIterations):
-        f0Mask = bool(np.zeros(len(f0)).tolist)
+        print(iteration)
+        f0Mask = np.zeros(len(f0)).astype(bool)
         # print(iteration)
         for n in np.arange(nw):
             indx = np.arange(winstart[n], (winstart[n] + Nwin))
@@ -803,9 +803,13 @@ def removeLinesMovingWindow(
             datafitwin, f0Sig = fitSignificantFrequencies(
                 datawin, f0, fPassBand, bandwidth, srate, p, padding, tapers
             )
+            print(n)
+            print(f0Sig),
+            print(datawin)
+            print(datafitwin)
             f0Mask = np.logical_or(f0Mask, f0Sig)
             # datafitwin0 = datafitwin incorrectly placed
-            if n > 1:
+            if n > 0:
                 datafitwin[0:Noverlap, :] = np.multiply(
                     smooth, datafitwin[0:Noverlap, :]
                 ) + np.multiply((1 - smooth), datafitwin0[(Nwin - Noverlap) : Nwin, :])
@@ -813,8 +817,62 @@ def removeLinesMovingWindow(
             datafit[indx, :] = datafitwin
             datafitwin0 = datafitwin  # Moved from above the if statement
         data[0 : len(datafit), :] = data[0 : len(datafit), :] - datafit
+        print(data[0:7,:])
+
+        if np.sum(f0Mask)>0:
+            # Now find the line frequencies that have converged
+            cleanedSpectrum, _ = calculateSegmentSpectrum(data, taperWinSize, srate, padding, fPassBand, tapers)
+            cleanedSpectrum = 10*np.log10(cleanedSpectrum); 
+            dBReduction = initialSpectrum - cleanedSpectrum
+            tIndex = (dBReduction[fidx.astype(int)] < 0)
+            f0[np.logical_or(tIndex, ~f0Mask)] = 0
+            fidx = fidx[np.logical_and(~tIndex, f0Mask)]
+            initialSpectrum = cleanedSpectrum
+        if  np.all(f0 == 0):
+            break
     return data.T
 
+def calculateSegmentSpectrum(data, win, Fs, pad, fpass, tapers):
+    # Create the segmented data for the calculation of the spectrum
+    N = data.shape[0] # length of segmented data
+    dt = 1/Fs # sampling interval
+    T = N*dt # length of data in seconds
+    E = np.arange(0,T-win, win) # fictitious event triggers
+    win = [0, win] # use window length to define left and right limits of windows around triggers
+    data = createdatamatc(data, E, Fs, win) # segmented data
+    N = data.shape[0] # length of segmented data
+    nfft = max(2^(nextpow2(N) + pad), N);
+    [f, findx] = getfgrid(Fs, nfft, fpass); 
+    tapers = tapers
+    J = mtfftc(data, tapers, nfft, Fs); # compute tapered fourier transforms
+    J = J[findx, :, :] # restrict to specified frequencies
+    S = np.mean(np.abs(J)**2, axis=1) # spectra of non-overlapping segments (average over tapers)
+    S = np.mean(S, axis=1) # Mean of the spectrum averaged across segments
+    return S, f
+
+
+def createdatamatc(data, E, Fs, win):
+    if data is None or E is None or Fs is None or win is None:
+        raise ValueError('Need all arguments')
+
+    NE = len(E)
+    nwinl = round(win[0] * Fs)
+    nwinr = round(win[1] * Fs)
+    nE = np.floor(E * Fs).astype(int) + 1
+    datatmp = []
+
+    for n in range(NE):
+        indx = np.arange(nE[n] - nwinl, nE[n] + nwinr)
+        datatmp.append(data[indx])
+
+    data = np.array(datatmp).T
+    return data.squeeze()
+
+
+def nextpow2(A):
+    if A <= 0:
+        raise ValueError("A must be greater than 0")
+    return int(np.ceil(np.log2(A)))
 
 def fitSignificantFrequencies(
     data, f0, fPassBand, bandwidth, srate, p, padding, tapers

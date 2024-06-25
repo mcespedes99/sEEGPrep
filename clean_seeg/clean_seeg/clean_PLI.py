@@ -290,13 +290,12 @@ def zapline(x, fline, srate, nremove=1, p={}, filt=1):
     return y
 
 # Cleanline
-def cleanline(EEG, srate, processes=None, channels = [], linefreq = [60], p=0.01, bandwidth = 2, taperHalfBW = 1, taperWinSize=4, taperWinStep = 1, tau=100, padding = 2):
+def cleanline(EEG, srate, processes=None, channels = [], linefreq = [60], p=0.01, bandwidth = 2, taperHalfBW = 1, taperWinSize=4, taperWinStep = 1, tau=100, padding = 2, maximumIterations=10):
     from multiprocessing.pool import Pool
     from multiprocessing import get_context
     from functools import partial
     from .utils import checkTapers, removeLinesMovingWindow
     fPassBand = [0, srate/2]
-    maximumIterations = 10
     # Add harmonics:
     if len(linefreq) == 1:
         lf = linefreq[0]
