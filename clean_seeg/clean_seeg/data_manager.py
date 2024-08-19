@@ -205,31 +205,29 @@ def extract_channel_header(chn_number, original_headers, chn_list, channels_labe
 def get_colors_labels(colortable_file):
     colortable = pd.read_table(colortable_file, index_col="index")
     cols = colortable.columns
-    if ("r" in cols) and ("g" in cols) and ("b" in cols):
-        colortable[["r", "g", "b"]] = colortable[["r", "g", "b"]].astype("int64")
-    else:
+    if ("color" not in cols):
+#        colortable[["color"]] = colortable[["r", "g", "b"]].astype("int64")
+#    else:
         # Generate random colors
-        rgb = set()
-        while len(rgb) < len(colortable.index):
+        color = set()
+        while len(color) < len(colortable.index):
             r, g, b = (
                 np.random.randint(0, 256),
                 np.random.randint(0, 256),
                 np.random.randint(0, 256),
             )
-            if (r, g, b) not in rgb and (r, g, b) != (
+            tmp_color = f'#{r:02x}{g:02x}{b:02x}'
+            if tmp_color not in color and (r, g, b) != (
                 0,
                 0,
                 0,
             ):  # (0,0,0) reserved for unknown
-                rgb.add((r, g, b))
-        r, g, b = zip(*rgb)
+                color.add(tmp_color)
         # Add to dataframe
-        colortable["r"] = r
-        colortable["g"] = g
-        colortable["b"] = b
+        colortable["color"] = color
     # Append element '0' (unknown) if doesn't exist
     if 0 not in colortable.index:
-        unknown_dict = {"name": ["Unknown"], "r": [0], "b": [0], "g": [0]}
+        unknown_dict = {"name": ["Unknown"], "color": [f'#{0:02x}{0:02x}{0:02x}']}
         for column in cols:
             if column not in unknown_dict:
                 unknown_dict[column] = [""]
@@ -578,9 +576,9 @@ def get_label_rgb(parc, elec_df, tfm_list, label_map, reference, vol_version=Fal
     print(label_map)
     print(id)
     print(regions_per_chn)
-    vals = label_map.loc[id, ["name", "r", "g", "b"]].to_numpy()
+    vals = label_map.loc[id, ["name", "color"]].to_numpy()
     vals = np.c_[id, vals]
-    vals = pd.DataFrame(data=vals, columns=["region ID", "region name", "r", "g", "b"])
+    vals = pd.DataFrame(data=vals, columns=["region ID", "region name", "color"])
     vals = pd.concat([elec_df, vals], axis=1)
     return vals, regions_per_chn, mask
 

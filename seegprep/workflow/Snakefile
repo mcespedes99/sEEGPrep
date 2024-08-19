@@ -54,7 +54,7 @@ def get_inputs(input_path, **zip_lists):
         annot = pd.read_csv(annot_file, sep='\t')
         # Find time stamps indexes where the 'awake trigger' event is happening
         # returns True on all the indexes where the event is found
-        instances = annot['event'].str.contains(config['event'][0], case=False, na=False)
+        instances = annot[config['event_label']].str.contains(config['event'][0], case=False, na=False)
         # Add specific amount of wildcards depending on the number of instances found
         n = np.count_nonzero(instances)
         out_wildcards_vals += [list_wildcards_vals[idx] + tuple([f'{number:02}']) for number in np.arange(1,n+1)]

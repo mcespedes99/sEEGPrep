@@ -36,6 +36,7 @@ pybids_inputs:
       - session
       - task
       - run
+      - acquisition
   
   events:
     filters:
@@ -46,6 +47,7 @@ pybids_inputs:
       - session
       - task
       - run
+      - acquisition
   
   channels:
     filters:
@@ -56,6 +58,7 @@ pybids_inputs:
       - session
       - task
       - run
+      - acquisition
   
   electrodes:
     filters:
@@ -64,6 +67,9 @@ pybids_inputs:
     wildcards:
       - subject
       - session
+      - task
+      - run
+      - acquisition
   
   json:
     filters:
@@ -74,6 +80,7 @@ pybids_inputs:
       - session
       - task
       - run
+      - acquisition
 
   parc:
     filters:
@@ -85,11 +92,13 @@ pybids_inputs:
       - acquisition
       - task
       - run
+      - acquisition
     custom_path: /scratch/mcesped/Results/registration/subject_space/bids/sub-{subject}/anat/sub-{subject}_desc-synthsegcortparc_dseg.nii.gz
 
 # ---------------- Pipeline parameters-------------------
 # Event: [label or index, 'duration' or 'n_samples', amount as seconds or int]
 event: ['awake trigger', 'duration', 240] # 4 min 'awake trigger'
+event_label: 'event' # name of column where events are described ('trial_type', 'event', etc.)
 
 # 1. Parameters for downsampling step:
 # (1.a) Target sampling rate
@@ -234,6 +243,9 @@ parse_args:
     default: false
     action: store_true
 
+  --event_label:
+    help: 'Name of column in events.tsv where the events labels are defined.'
+    default: 'event'
 
 #singularity containers
 singularity:

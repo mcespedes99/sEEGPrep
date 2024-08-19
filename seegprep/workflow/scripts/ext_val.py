@@ -50,8 +50,10 @@ def check_channels(edf_obj, tsv_obj, json_obj):
             list_filt = [
                 ("Low Pass", "low_cutoff", "LP"),
                 ("High Pass", "high_cutoff", "HP"),
-                ("Notch", "notch", "N"),
             ]
+            # Check if notch filtering is present in channels.tsv as it is optional
+            if "notch" in list(tsv_obj.columns):
+                list_filt.append(("Notch", "notch", "N"))
             for filt_name, filt_tsv, filt_edf in list_filt:
                 # Check for LP in the edf file
                 pattern = f"{filt_edf}:(\d+\.*\d*)Hz"
